@@ -11,9 +11,9 @@ namespace Craftsman.Models
         private Bus _bus = new();
 
         /// <summary>
-        /// The name of the solution you want to build
+        /// The name of the project in your bounded context
         /// </summary>
-        public string SolutionName { get; set; }
+        public string ProjectName { get; set; }
 
         /// <summary>
         /// The name of the solution you want to build
@@ -73,7 +73,5 @@ namespace Craftsman.Models
         /// A list of eventing producers to be added to the BC
         /// </summary>
         public List<Producer> Producers { get; set; } = new List<Producer>();
-
-        public AuthorizationSettings AuthorizationSettings { get; set; } = new AuthorizationSettings();
     }
 }

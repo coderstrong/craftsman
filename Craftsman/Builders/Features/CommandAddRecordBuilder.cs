@@ -9,9 +9,9 @@
 
     public class CommandAddRecordBuilder
     {
-        public static void CreateCommand(string solutionDirectory, Entity entity, string contextName, string projectBaseName)
+        public static void CreateCommand(string srcDirectory, Entity entity, string contextName, string projectBaseName)
         {
-            var classPath = ClassPathHelper.FeaturesClassPath(solutionDirectory, $"{Utilities.AddEntityFeatureClassName(entity.Name)}.cs", entity.Plural, projectBaseName);
+            var classPath = ClassPathHelper.FeaturesClassPath(srcDirectory, $"{Utilities.AddEntityFeatureClassName(entity.Name)}.cs", entity.Plural, projectBaseName);
 
             if (!Directory.Exists(classPath.ClassDirectory))
                 Directory.CreateDirectory(classPath.ClassDirectory);
@@ -22,12 +22,12 @@
             using (FileStream fs = File.Create(classPath.FullClassPath))
             {
                 var data = "";
-                data = GetCommandFileText(classPath.ClassNamespace, entity, contextName, solutionDirectory, projectBaseName);
+                data = GetCommandFileText(classPath.ClassNamespace, entity, contextName, srcDirectory, projectBaseName);
                 fs.Write(Encoding.UTF8.GetBytes(data));
             }
         }
 
-        public static string GetCommandFileText(string classNamespace, Entity entity, string contextName, string solutionDirectory, string projectBaseName)
+        public static string GetCommandFileText(string classNamespace, Entity entity, string contextName, string srcDirectory, string projectBaseName)
         {
             var className = Utilities.AddEntityFeatureClassName(entity.Name);
             var addCommandName = Utilities.CommandAddName(entity.Name);
@@ -37,22 +37,15 @@
 
             var entityName = entity.Name;
             var entityNameLowercase = entity.Name.LowercaseFirstLetter();
-            var primaryKeyPropName = entity.PrimaryKeyProperty.Name;
+            var primaryKeyPropName = Entity.PrimaryKeyProperty.Name;
             var commandProp = $"{entityName}ToAdd";
             var newEntityProp = $"{entityNameLowercase}ToAdd";
 
-            var entityClassPath = ClassPathHelper.EntityClassPath(solutionDirectory, "", projectBaseName);
-            var dtoClassPath = ClassPathHelper.DtoClassPath(solutionDirectory, "", entity.Name, projectBaseName);
-            var exceptionsClassPath = ClassPathHelper.CoreExceptionClassPath(solutionDirectory, "", projectBaseName);
-            var contextClassPath = ClassPathHelper.DbContextClassPath(solutionDirectory, "", projectBaseName);
-            var validatorsClassPath = ClassPathHelper.ValidationClassPath(solutionDirectory, "", entity.Plural, projectBaseName);
-
-            var conflictConditional = entity.PrimaryKeyProperty.Type.IsGuidPropertyType() ? @$"
-                if (await _db.{entity.Plural}.AnyAsync({entity.Lambda} => {entity.Lambda}.{primaryKeyPropName} == request.{commandProp}.{primaryKeyPropName}))
-                {{
-                    throw new ConflictException(""{entity.Name} already exists with this primary key."");
-                }}
-" : "";
+            var entityClassPath = ClassPathHelper.EntityClassPath(srcDirectory, "", entity.Plural, projectBaseName);
+            var dtoClassPath = ClassPathHelper.DtoClassPath(srcDirectory, "", entity.Name, projectBaseName);
+            var exceptionsClassPath = ClassPathHelper.ExceptionsClassPath(srcDirectory, "", projectBaseName);
+            var contextClassPath = ClassPathHelper.DbContextClassPath(srcDirectory, "", projectBaseName);
+            var validatorsClassPath = ClassPathHelper.ValidationClassPath(srcDirectory, "", entity.Plural, projectBaseName);
 
             return @$"namespace {classNamespace}
 {{
@@ -82,13 +75,6 @@
             }}
         }}
 
-        public class CustomCreate{entityName}Validation : {manipulationValidator}<{createDto}>
-        {{
-            public CustomCreate{entityName}Validation()
-            {{
-            }}
-        }}
-
         public class Handler : IRequestHandler<{addCommandName}, {readDto}>
         {{
             private readonly {contextName} _db;
@@ -101,22 +87,15 @@
             }}
 
             public async Task<{readDto}> Handle({addCommandName} request, CancellationToken cancellationToken)
-            {{{conflictConditional}
+            {{
                 var {entityNameLowercase} = _mapper.Map<{entityName}> (request.{commandProp});
                 _db.{entity.Plural}.Add({entityNameLowercase});
-                var saveSuccessful = await _db.SaveChangesAsync() > 0;
 
-                if (saveSuccessful)
-                {{
-                    return await _db.{entity.Plural}
-                        .ProjectTo<{readDto}>(_mapper.ConfigurationProvider)
-                        .FirstOrDefaultAsync({entity.Lambda} => {entity.Lambda}.{primaryKeyPropName} == {entityNameLowercase}.{primaryKeyPropName});
-                }}
-                else
-                {{
-                    // add log
-                    throw new Exception(""Unable to save the new record. Please check the logs for more information."");
-                }}
+                await _db.SaveChangesAsync();
+
+                return await _db.{entity.Plural}
+                    .ProjectTo<{readDto}>(_mapper.ConfigurationProvider)
+                    .FirstOrDefaultAsync({entity.Lambda} => {entity.Lambda}.{primaryKeyPropName} == {entityNameLowercase}.{primaryKeyPropName});
             }}
         }}
     }}

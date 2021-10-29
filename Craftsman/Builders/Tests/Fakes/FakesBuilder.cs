@@ -10,38 +10,38 @@
 
     public static class FakesBuilder
     {
-        public static void CreateFakes(string solutionDirectory, string solutionName, Entity entity)
+        public static void CreateFakes(string solutionDirectory, string projectName, Entity entity)
         {
             // ****this class path will have an invalid FullClassPath. just need the directory
-            var classPath = ClassPathHelper.TestFakesClassPath(solutionDirectory, $"", entity.Name, solutionName);
+            var classPath = ClassPathHelper.TestFakesClassPath(solutionDirectory, $"", entity.Name, projectName);
 
             if (!Directory.Exists(classPath.ClassDirectory))
                 Directory.CreateDirectory(classPath.ClassDirectory);
 
-            CreateFakerFile(solutionDirectory, entity.Name, entity, solutionName);
-            CreateFakerFile(solutionDirectory, Utilities.GetDtoName(entity.Name, Dto.Creation), entity, solutionName);
-            CreateFakerFile(solutionDirectory, Utilities.GetDtoName(entity.Name, Dto.Read), entity, solutionName);
-            CreateFakerFile(solutionDirectory, Utilities.GetDtoName(entity.Name, Dto.Update), entity, solutionName);
+            CreateFakerFile(solutionDirectory, entity.Name, entity, projectName);
+            CreateFakerFile(solutionDirectory, Utilities.GetDtoName(entity.Name, Dto.Creation), entity, projectName);
+            CreateFakerFile(solutionDirectory, Utilities.GetDtoName(entity.Name, Dto.Read), entity, projectName);
+            CreateFakerFile(solutionDirectory, Utilities.GetDtoName(entity.Name, Dto.Update), entity, projectName);
         }
 
-        private static void CreateFakerFile(string solutionDirectory, string objectToFakeClassName, Entity entity, string solutionName)
+        private static void CreateFakerFile(string solutionDirectory, string objectToFakeClassName, Entity entity, string projectName)
         {
             var fakeFilename = $"Fake{objectToFakeClassName}.cs";
-            var classPath = ClassPathHelper.TestFakesClassPath(solutionDirectory, fakeFilename, entity.Name, solutionName);
+            var classPath = ClassPathHelper.TestFakesClassPath(solutionDirectory, fakeFilename, entity.Name, projectName);
 
             if (File.Exists(classPath.FullClassPath))
                 throw new FileAlreadyExistsException(classPath.FullClassPath);
 
             using (FileStream fs = File.Create(classPath.FullClassPath))
             {
-                var data = GetFakeFileText(classPath.ClassNamespace, objectToFakeClassName, entity, solutionDirectory, solutionName);
+                var data = GetFakeFileText(classPath.ClassNamespace, objectToFakeClassName, entity, solutionDirectory, projectName);
                 fs.Write(Encoding.UTF8.GetBytes(data));
             }
         }
 
         private static string GetFakeFileText(string classNamespace, string objectToFakeClassName, Entity entity, string solutionDirectory, string projectBaseName)
         {
-            var entitiesClassPath = ClassPathHelper.EntityClassPath(solutionDirectory, "", projectBaseName);
+            var entitiesClassPath = ClassPathHelper.EntityClassPath(solutionDirectory, "", entity.Plural, projectBaseName);
             var dtoClassPath = ClassPathHelper.DtoClassPath(solutionDirectory, "", entity.Name, projectBaseName);
 
             // this... is super fragile. Should really refactor this

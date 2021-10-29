@@ -2,6 +2,8 @@
 
 namespace Craftsman.Models
 {
+    using System.Linq;
+
     /// <summary>
     /// This is the complete object representation of the API that we will read in from our input file and scaffold out the necessary files
     /// </summary>
@@ -25,18 +27,17 @@ namespace Craftsman.Models
         /// <summary>
         /// Add swagger comments to the controller Optional
         /// </summary>
-        public bool AddSwaggerComments { get; set; } = false;
-
-        public AuthorizationSettings AuthorizationSettings { get; set; } = new AuthorizationSettings();
+        public bool AddSwaggerComments { get; set; } = true;
 
         /// <summary>
         /// Calculation to determine whether or not authentication is added to the project
         /// </summary>
-        public bool AddJwtAuthentication
-        {
-            get => AuthorizationSettings
-                .Policies
+        public bool AddJwtAuthentication =>
+            Entities
+                .Select(e => e.Features
+                    .Select(f => f.Policies)
+                    .ToList())
+                .ToList()
                 .Count > 0;
-        }
     }
 }

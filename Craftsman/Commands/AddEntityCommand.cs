@@ -10,6 +10,7 @@
     using System;
     using System.IO;
     using System.IO.Abstractions;
+    using System.Linq;
     using static Helpers.ConsoleWriter;
     using Spectre.Console;
 
@@ -61,7 +62,7 @@
                 FileParsingHelper.RunPrimaryKeyGuard(template.Entities);
 
                 // add all files based on the given template config
-                RunEntityBuilders(srcDirectory, testDirectory, template, fileSystem, verbosity);
+                RunEntityBuilders(srcDirectory, testDirectory, template, fileSystem);
 
                 WriteHelpHeader($"{Environment.NewLine}Your entities have been successfully added. Keep up the good work!");
             }
@@ -93,7 +94,7 @@
             }
         }
 
-        private static void RunEntityBuilders(string srcDirectory, string testDirectory, AddEntityTemplate template, IFileSystem fileSystem, Verbosity verbosity)
+        private static void RunEntityBuilders(string srcDirectory, string testDirectory, AddEntityTemplate template, IFileSystem fileSystem)
         {
             //entities
             EntityScaffolding.ScaffoldEntities(srcDirectory,
@@ -102,15 +103,16 @@
                 template.Entities,
                 template.DbContextName,
                 template.AddSwaggerComments,
-                template.AuthorizationSettings.Policies,
-                fileSystem,
-                verbosity);
-
-            //seeders & dbsets
-            InfrastructureServiceRegistrationModifier.AddPolicies(srcDirectory, template.AuthorizationSettings.Policies, template.SolutionName);
+                fileSystem);
+            
+            //TODO move inside scaffoldentites?
+            foreach (var feature in template.Entities.SelectMany(entity => entity.Features))
+            {
+                InfrastructureServiceRegistrationModifier.AddPolicies(srcDirectory, feature.Policies , template.SolutionName);
+                SwaggerServiceRegistrationModifier.AddPolicies(srcDirectory, feature.Policies , template.SolutionName);
+            }
             SeederModifier.AddSeeders(srcDirectory, template.Entities, template.DbContextName, template.SolutionName);
             DbContextModifier.AddDbSet(srcDirectory, template.Entities, template.DbContextName, template.SolutionName);
-            ApiRouteModifier.AddRoutes(testDirectory, template.Entities, template.SolutionName);
         }
 
         private static AddEntityTemplate GetDbContext(string srcDirectory, AddEntityTemplate template, string projectBaseName)

@@ -33,12 +33,12 @@
             var queryRecordName = Utilities.QueryRecordName(entity.Name);
             var readDto = Utilities.GetDtoName(entity.Name, Dto.Read);
 
-            var primaryKeyPropType = entity.PrimaryKeyProperty.Type;
-            var primaryKeyPropName = entity.PrimaryKeyProperty.Name;
+            var primaryKeyPropType = Entity.PrimaryKeyProperty.Type;
+            var primaryKeyPropName = Entity.PrimaryKeyProperty.Name;
             var primaryKeyPropNameLowercase = primaryKeyPropName.LowercaseFirstLetter();
 
             var dtoClassPath = ClassPathHelper.DtoClassPath(solutionDirectory, "", entity.Name, projectBaseName);
-            var exceptionsClassPath = ClassPathHelper.CoreExceptionClassPath(solutionDirectory, "", projectBaseName);
+            var exceptionsClassPath = ClassPathHelper.ExceptionsClassPath(solutionDirectory, "", projectBaseName);
             var contextClassPath = ClassPathHelper.DbContextClassPath(solutionDirectory, "", projectBaseName);
 
             return @$"namespace {classNamespace}
@@ -80,17 +80,12 @@
 
             public async Task<{readDto}> Handle({queryRecordName} request, CancellationToken cancellationToken)
             {{
-                // add logger (and a try catch with logger so i can cap the unexpected info)........ unless this happens in my logger decorator that i am going to add?
-
                 var result = await _db.{entity.Plural}
                     .ProjectTo<{readDto}>(_mapper.ConfigurationProvider)
                     .FirstOrDefaultAsync({entity.Lambda} => {entity.Lambda}.{primaryKeyPropName} == request.{primaryKeyPropName});
 
                 if (result == null)
-                {{
-                    // log error
                     throw new KeyNotFoundException();
-                }}
 
                 return result;
             }}

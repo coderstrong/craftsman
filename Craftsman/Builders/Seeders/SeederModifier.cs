@@ -14,7 +14,7 @@
         {
             foreach (var entity in entities)
             {
-                var classPath = ClassPathHelper.SeederClassPath(srcDirectory, $"{Utilities.GetSeederName(entity)}.cs", projectBaseName);
+                var classPath = ClassPathHelper.DummySeederClassPath(srcDirectory, $"{Utilities.GetSeederName(entity)}.cs", projectBaseName);
 
                 if (!Directory.Exists(classPath.ClassDirectory))
                     Directory.CreateDirectory(classPath.ClassDirectory);
@@ -71,7 +71,7 @@
             var seeders = "";
             foreach (var entity in entities)
             {
-                seeders += @$"                    {Utilities.GetSeederName(entity)}.SeedSample{entity.Name}Data(app.ApplicationServices.GetService<{dbContextName}>());";
+                seeders += @$"                    {Utilities.GetSeederName(entity)}.SeedSample{entity.Name}Data(app.ApplicationServices.GetService<{dbContextName}>());{Environment.NewLine}";
             }
 
             return seeders;

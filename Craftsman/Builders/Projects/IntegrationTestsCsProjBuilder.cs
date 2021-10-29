@@ -27,9 +27,7 @@
 
         public static string GetTestsCsProjFileText(bool addJwtAuth, string solutionDirectory, string projectBaseName)
         {
-            var coreClassPath = ClassPathHelper.CoreProjectClassPath(solutionDirectory, projectBaseName);
             var webApiClassPath = ClassPathHelper.WebApiProjectClassPath(solutionDirectory, projectBaseName);
-            var infraClassPath = ClassPathHelper.InfrastructureProjectClassPath(solutionDirectory, projectBaseName);
             var sharedTestClassPath = ClassPathHelper.SharedTestProjectClassPath(solutionDirectory, projectBaseName);
 
             return @$"<Project Sdk=""Microsoft.NET.Sdk"">
@@ -44,6 +42,7 @@
     <PackageReference Include=""AutoBogus"" Version=""2.13.0"" />
     <PackageReference Include=""Bogus"" Version=""33.0.2"" />
     <PackageReference Include=""Docker.DotNet"" Version=""3.125.4"" />
+    <PackageReference Include=""Ductus.FluentDocker"" Version=""2.10.7"" />
     <PackageReference Include=""FluentAssertions"" Version=""5.10.3"" />
     <PackageReference Include=""Microsoft.AspNetCore.Mvc.Testing"" Version=""5.0.6"" />
     <PackageReference Include=""MediatR"" Version=""9.0.0"" />
@@ -57,8 +56,6 @@
   </ItemGroup>
 
   <ItemGroup>
-    <ProjectReference Include=""..\..\src\{coreClassPath.ClassNamespace}\{coreClassPath.ClassName}"" />
-    <ProjectReference Include=""..\..\src\{infraClassPath.ClassNamespace}\{infraClassPath.ClassName}"" />
     <ProjectReference Include=""..\..\src\{webApiClassPath.ClassNamespace}\{webApiClassPath.ClassName}"" />
     <ProjectReference Include=""..\{sharedTestClassPath.ClassNamespace}\{sharedTestClassPath.ClassName}"" />
   </ItemGroup>

@@ -8,9 +8,7 @@
         {
             // Check for empty string.
             if (string.IsNullOrEmpty(value))
-            {
-                return string.Empty;
-            }
+                return value;
             // Return char and concat substring.
             return char.ToUpper(value[0]) + value.Substring(1);
         }
@@ -19,11 +17,31 @@
         {
             // Check for empty string.
             if (string.IsNullOrEmpty(value))
-            {
-                return string.Empty;
-            }
+                return value;
+            
             // Return char and concat substring.
             return char.ToLower(value[0]) + value.Substring(1);
+        }
+
+        public static string EscapeCurlyBraces(this string value)
+        {
+            // Check for empty string.
+            if (string.IsNullOrEmpty(value))
+                return value;
+
+            return value
+                .Replace("{", "{{")
+                .Replace("}", "}}");
+        }
+
+        public static string EscapeSpaces(this string value, string escapeWith = "")
+        {
+            // Check for empty string.
+            if (string.IsNullOrEmpty(value))
+                return value;
+
+            return value
+                .Replace(" ", escapeWith);
         }
 
         public static string RemoveLastNewLine(this string input)

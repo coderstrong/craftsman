@@ -13,37 +13,47 @@ Craftsman is the workhorse behind the [Wrapt](https://wrapt.dev) framework and p
 
 For all the documentation on how to use Craftsman, visit [wrapt.dev](https://wrapt.dev).
 
-## Upcoming Features in v0.11.x - SpaCurity 🔐
+## Upcoming Features in v0.12
 
-Below are some items I have on the docket for v0.11.x. I likely won't get to everything below and this could be reprioritized a bit over time, but want to make sure I let everyone know what's on the horizon! 
+v0.11 had a lot of little cleanup items, but I want to bring in some of the big heavy hitting wins in v0.12. Below are some items I have on the docket for the upcoming release. I surely won't get to everything below and this could be reprioritized a bit over time, but want to make sure I let everyone know what's on the horizon! 
 
 Have a request for something you don't see below? Shoot me a message and let's talk about it!
 
-✅ Added `add:feature` command
+✅ docker utility updates for integration tests using [Fluent Docker](https://github.com/mariotoffia/FluentDocker) 🐳
 
-🚧 Add `add:endpoint` command
+✅  `add:feature` enhancement to add more than just ad-hoc features
 
-🚧 Auth Server Scaffolding
+✅  new `AddListByFk` option for the `add:feature`  command and `FeatureType` property of an entity
+
+✅ Better foreign key support
+
+✅ `example` command to generate example projects with associated templates
+
+✅ Auth Server Scaffolding (In-Memory)
+
+🚧 Better environment variable support
+
+🚧 Add Identity to Auth Server
+
+🚧 Auditable Entities
+
+🚧 Current user service
 
 🚧 BFF Scaffolding
 
-🚧 Nextjs Scaffolding
+🚧 React Scaffolding
+
+🚧 Json Schema for easier file scaffolding
+
+🚧 More scaffolded test coverage
+
+🚧 Refactor error handling pipeline
 
 🚧 Performance Upgrades
 
 🚧 Pub/Sub Tests
 
 🚧 Logging Updates and OpenTelemetry additions 
-
-🚧 Pipeline Decorators
-
-🚧 More scaffolded test coverage
-
-🚧 Refactor error handling pipeline
-
-🚧 Auditable Entities
-
-🚧 Current user capture
 
 ## Support
 

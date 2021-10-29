@@ -8,9 +8,9 @@
 
     public class InfrastructureServiceRegistrationModifier
     {
-        public static void InitializeAuthServices(string solutionDirectory, string projectBaseName, List<Policy> policies)
+        public static void InitializeAuthServices(string srcDirectory, string projectBaseName, List<Policy> policies)
         {
-            var classPath = ClassPathHelper.InfrastructureServiceRegistrationClassPath(solutionDirectory, projectBaseName);
+            var classPath = ClassPathHelper.WebApiServiceExtensionsClassPath(srcDirectory, $"{Utilities.GetInfraRegistrationName()}.cs", projectBaseName);
 
             if (!Directory.Exists(classPath.ClassDirectory))
                 Directory.CreateDirectory(classPath.ClassDirectory);
@@ -20,7 +20,7 @@
 
             var authUsings = $@"
     using Microsoft.AspNetCore.Authentication.JwtBearer;";
-            var authServices = GetAuthServicesText(policies);
+            var authServices = GetAuthServicesText();
 
             var tempPath = $"{classPath.FullClassPath}temp";
             using (var input = File.OpenText(classPath.FullClassPath))
@@ -52,9 +52,9 @@
             File.Move(tempPath, classPath.FullClassPath);
         }
 
-        public static void AddPolicies(string solutionDirectory, List<Policy> policies, string projectBaseName)
+        public static void AddPolicies(string srcDirectory, List<Policy> policies, string projectBaseName)
         {
-            var classPath = ClassPathHelper.InfrastructureServiceRegistrationClassPath(solutionDirectory, projectBaseName);
+            var classPath = ClassPathHelper.WebApiServiceExtensionsClassPath(srcDirectory, $"{Utilities.GetInfraRegistrationName()}.cs", projectBaseName);
 
             if (!Directory.Exists(classPath.ClassDirectory))
                 Directory.CreateDirectory(classPath.ClassDirectory);
@@ -63,10 +63,10 @@
                 throw new FileNotFoundException($"The `{classPath.FullClassPath}` file could not be found.");
 
             var policiesString = "";
-            var nonExistantPolicies = GetPoliciesThatDoNotExist(policies, classPath.FullClassPath);
+            var nonExistantPolicies = Utilities.GetPoliciesThatDoNotExist(policies, classPath.FullClassPath);
             foreach (var policy in nonExistantPolicies)
             {
-                policiesString += $@"{Environment.NewLine}{Utilities.PolicyStringBuilder(policy)}";
+                policiesString += $@"{Environment.NewLine}{Utilities.PolicyInfraStringBuilder(policy)}";
             }
 
             var tempPath = $"{classPath.FullClassPath}temp";
@@ -99,14 +99,8 @@
             File.Move(tempPath, classPath.FullClassPath);
         }
 
-        private static string GetAuthServicesText(List<Policy> policies)
+        private static string GetAuthServicesText()
         {
-            var policiesString = "";
-            foreach (var policy in policies)
-            {
-                policiesString += $@"{Environment.NewLine}{Utilities.PolicyStringBuilder(policy)}";
-            }
-
             return $@"
             if(env.EnvironmentName != ""FunctionalTesting"")
             {{
@@ -119,26 +113,8 @@
             }}
 
             services.AddAuthorization(options =>
-            {{{policiesString}
+            {{
             }});";
-        }
-
-        private static List<Policy> GetPoliciesThatDoNotExist(List<Policy> policies, string existingFileFullClassPath)
-        {
-            var nonExistantPolicies = new List<Policy>();
-            nonExistantPolicies.AddRange(policies);
-
-            var fileText = File.ReadAllText(existingFileFullClassPath);
-
-            foreach (var policy in policies)
-            {
-                if (fileText.Contains(policy.Name) || fileText.Contains(policy.PolicyValue))
-                {
-                    nonExistantPolicies.Remove(policy);
-                }
-            }
-
-            return nonExistantPolicies;
         }
     }
 }

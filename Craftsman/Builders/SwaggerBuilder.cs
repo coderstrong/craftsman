@@ -8,15 +8,16 @@
     using System.Collections.Generic;
     using System.IO;
     using System.IO.Abstractions;
+    using System.Linq;
     using System.Text;
 
     public class SwaggerBuilder
     {
-        public static void AddSwagger(string solutionDirectory, SwaggerConfig swaggerConfig, string solutionName, bool addJwtAuthentication, List<Policy> policies, string projectBaseName, IFileSystem fileSystem)
+        public static void AddSwagger(string solutionDirectory, SwaggerConfig swaggerConfig, string projectName, bool addJwtAuthentication, IEnumerable<Policy> policies, string projectBaseName, IFileSystem fileSystem)
         {
             if (!swaggerConfig.IsSameOrEqualTo(new SwaggerConfig()))
             {
-                AddSwaggerServiceExtension(solutionDirectory, projectBaseName, swaggerConfig, solutionName, addJwtAuthentication, policies, fileSystem);
+                AddSwaggerServiceExtension(solutionDirectory, projectBaseName, swaggerConfig, projectName, addJwtAuthentication, policies, fileSystem);
                 WebApiAppExtensionsBuilder.CreateSwaggerWebApiAppExtension(solutionDirectory, swaggerConfig, addJwtAuthentication, projectBaseName, fileSystem);
                 UpdateWebApiCsProjSwaggerSettings(solutionDirectory, projectBaseName);
             }
@@ -60,9 +61,9 @@
             File.Move(tempPath, classPath.FullClassPath);
         }
 
-        public static void AddSwaggerServiceExtension(string solutionDirectory, string projectBaseName, SwaggerConfig swaggerConfig, string solutionName, bool addJwtAuthentication, List<Policy> policies, IFileSystem fileSystem)
+        public static void AddSwaggerServiceExtension(string srcDirectory, string projectBaseName, SwaggerConfig swaggerConfig, string projectName, bool addJwtAuthentication, IEnumerable<Policy> policies, IFileSystem fileSystem)
         {
-            var classPath = ClassPathHelper.WebApiServiceExtensionsClassPath(solutionDirectory, $"SwaggerServiceExtension.cs", projectBaseName);
+            var classPath = ClassPathHelper.WebApiServiceExtensionsClassPath(srcDirectory, $"{Utilities.GetSwaggerServiceExtensionName()}.cs", projectBaseName);
 
             if (!fileSystem.Directory.Exists(classPath.ClassDirectory))
                 fileSystem.Directory.CreateDirectory(classPath.ClassDirectory);
@@ -70,15 +71,13 @@
             if (fileSystem.File.Exists(classPath.FullClassPath))
                 throw new FileAlreadyExistsException(classPath.FullClassPath);
 
-            using (var fs = fileSystem.File.Create(classPath.FullClassPath))
-            {
-                var data = "";
-                data = GetSwaggerServiceExtensionText(classPath.ClassNamespace, swaggerConfig, solutionName, addJwtAuthentication, policies);
-                fs.Write(Encoding.UTF8.GetBytes(data));
-            }
+            using var fs = fileSystem.File.Create(classPath.FullClassPath);
+            var data = "";
+            data = GetSwaggerServiceExtensionText(classPath.ClassNamespace, swaggerConfig, projectName, addJwtAuthentication, policies);
+            fs.Write(Encoding.UTF8.GetBytes(data));
         }
 
-        public static string GetSwaggerServiceExtensionText(string classNamespace, SwaggerConfig swaggerConfig, string solutionName, bool addJwtAuthentication, List<Policy> policies)
+        public static string GetSwaggerServiceExtensionText(string classNamespace, SwaggerConfig swaggerConfig, string projectName, bool addJwtAuthentication, IEnumerable<Policy> policies)
         {
             return @$"namespace {classNamespace}
 {{
@@ -96,12 +95,12 @@
 
     public static class SwaggerServiceExtension
     {{
-        {GetSwaggerServiceExtensionText(swaggerConfig, solutionName, addJwtAuthentication, policies)}
+        {GetSwaggerServiceExtensionText(swaggerConfig, projectName, addJwtAuthentication, policies)}
     }}
 }}";
         }
 
-        private static string GetSwaggerServiceExtensionText(SwaggerConfig swaggerConfig, string solutionName, bool addJwtAuthentication, List<Policy> policies)
+        private static string GetSwaggerServiceExtensionText(SwaggerConfig swaggerConfig, string projectName, bool addJwtAuthentication, IEnumerable<Policy> policies)
         {
             var contactUrlLine = IsCleanUri(swaggerConfig.ApiContact.Url)
                 ? $@"
@@ -114,7 +113,7 @@
 
             var licenseText = GetLicenseText(swaggerConfig.LicenseName, LicenseUrlLine);
 
-            var policyScopes = GetPolicies(policies);
+            var policyScopes = Utilities.GetSwaggerPolicies(policies);
             var swaggerAuth = addJwtAuthentication ? $@"
 
                 config.AddSecurityDefinition(""oauth2"", new OpenApiSecurityScheme
@@ -151,11 +150,11 @@
                     }}
                 }}); " : $@"";
 
-            var SwaggerXmlComments = "";
+            var swaggerXmlComments = "";
             if (swaggerConfig.AddSwaggerComments)
-                SwaggerXmlComments = $@"
+                swaggerXmlComments = $@"
 
-                config.IncludeXmlComments(string.Format(@$""{{AppDomain.CurrentDomain.BaseDirectory}}{{Path.DirectorySeparatorChar}}{solutionName}.WebApi.xml""));";
+                config.IncludeXmlComments(string.Format(@$""{{AppDomain.CurrentDomain.BaseDirectory}}{{Path.DirectorySeparatorChar}}{projectName}.WebApi.xml""));";
 
             var swaggerText = $@"public static void AddSwaggerExtension(this IServiceCollection services, IConfiguration configuration)
         {{
@@ -173,23 +172,11 @@
                             Name = ""{swaggerConfig.ApiContact.Name}"",
                             Email = ""{swaggerConfig.ApiContact.Email}"",{contactUrlLine}
                         }},{licenseText}
-                    }});{swaggerAuth}{SwaggerXmlComments}
+                    }});{swaggerAuth}{swaggerXmlComments}
             }});
         }}";
 
             return swaggerText;
-        }
-
-        private static object GetPolicies(List<Policy> policies)
-        {
-            var policyStrings = "";
-            foreach (var policy in policies)
-            {
-                policyStrings += $@"
-                                    {{ ""{policy.PolicyValue}"",""{policy.Name}"" }},";
-            }
-
-            return policyStrings;
         }
 
         private static string GetLicenseText(string licenseName, string licenseUrlLine)

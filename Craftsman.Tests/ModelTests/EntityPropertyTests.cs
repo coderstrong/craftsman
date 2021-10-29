@@ -7,25 +7,24 @@ namespace Craftsman.Tests.ModelTests
     public class EntityPropertyTests
     {
         [Fact]
-        public void PropertyIsRequiredAndCanNotBeManipulatedIfIsPrimaryKey()
+        public void property_is_required_when_marked_true_and_not_pk()
         {
             var prop = new EntityProperty()
             {
-                IsPrimaryKey = true
+                IsRequired = true
             };
 
             prop.IsRequired.Should().Be(true);
-            prop.CanManipulate.Should().Be(false);
         }
 
         [Theory]
         [InlineData("keyname",true)]
         [InlineData(null, false)]
-        public void ISForiegnKeyAssignedAppropriately(string keyname, bool isFk)
+        public void ISForiegnKeyAssignedAppropriately(string keyName, bool isFk)
         {
             var prop = new EntityProperty()
             {
-                ForeignKeyPropName = keyname
+                ForeignEntityName = keyName
             };
 
             prop.IsForeignKey.Should().Be(isFk);

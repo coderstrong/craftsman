@@ -35,7 +35,7 @@
 
             var testUtilClassPath = ClassPathHelper.IntegrationTestUtilitiesClassPath(solutionDirectory, projectBaseName, "");
             var fakerClassPath = ClassPathHelper.TestFakesClassPath(solutionDirectory, "", entity.Name, projectBaseName);
-            var exceptionClassPath = ClassPathHelper.CoreExceptionClassPath(solutionDirectory, "", projectBaseName);
+            var exceptionClassPath = ClassPathHelper.ExceptionsClassPath(solutionDirectory, "", projectBaseName);
             var dtoClassPath = ClassPathHelper.DtoClassPath(solutionDirectory, "", entity.Name, projectBaseName);
             var featuresClassPath = ClassPathHelper.FeaturesClassPath(solutionDirectory, featureName, entity.Plural, projectBaseName);
 
@@ -83,11 +83,11 @@
             var updateDto = Utilities.GetDtoName(entity.Name, Dto.Update);
             var fakeEntityVariableName = $"fake{entity.Name}One";
             var lowercaseEntityName = entity.Name.LowercaseFirstLetter();
-            var pkName = entity.PrimaryKeyProperty.Name;
+            var pkName = Entity.PrimaryKeyProperty.Name;
             var lowercaseEntityPk = pkName.LowercaseFirstLetter();
 
             return $@"[Test]
-        public async Task {commandName}_Updates_Existing_{entity.Name}_In_Db()
+        public async Task can_patch_existing_{entity.Name.ToLower()}_in_db()
         {{
             // Arrange
             var {fakeEntityVariableName} = new {fakeEntity} {{ }}.Generate();
@@ -111,12 +111,12 @@
 
         private static string NullPatchDoc(string commandName, Entity entity, string featureName)
         {
-            var randomId = Utilities.GetRandomId(entity.PrimaryKeyProperty.Type);
+            var randomId = Utilities.GetRandomId(Entity.PrimaryKeyProperty.Type);
 
             return randomId == "" ? "" : $@"
 
         [Test]
-        public async Task {commandName}_Throws_ApiException_When_Null_Patchdoc()
+        public async Task passing_null_patchdoc_throws_apiexception()
         {{
             // Arrange
             var randomId = {randomId};
@@ -132,12 +132,12 @@
 
         private static string BadKey(string commandName, Entity entity, string featureName)
         {
-            var badId = Utilities.GetRandomId(entity.PrimaryKeyProperty.Type);
+            var badId = Utilities.GetRandomId(Entity.PrimaryKeyProperty.Type);
             var updateDto = Utilities.GetDtoName(entity.Name, Dto.Update);
 
             return badId == "" ? "" : $@"
         [Test]
-        public async Task {commandName}_Throws_KeyNotFoundException_When_Bad_PK()
+        public async Task patch_{entity.Name.ToLower()}_throws_keynotfound_exception_when_record_does_not_exist()
         {{
             // Arrange
             var badId = {badId};

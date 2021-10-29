@@ -33,11 +33,11 @@
             var queryListName = Utilities.QueryListName(entity.Name);
             var readDto = Utilities.GetDtoName(entity.Name, Dto.Read);
             var paramsDto = Utilities.GetDtoName(entity.Name, Dto.ReadParamaters);
-            var primaryKeyPropName = entity.PrimaryKeyProperty.Name;
+            var primaryKeyPropName = Entity.PrimaryKeyProperty.Name;
 
-            var entityClassPath = ClassPathHelper.EntityClassPath(solutionDirectory, "", projectBaseName);
+            var entityClassPath = ClassPathHelper.EntityClassPath(solutionDirectory, "", entity.Plural, projectBaseName);
             var dtoClassPath = ClassPathHelper.DtoClassPath(solutionDirectory, "", entity.Name, projectBaseName);
-            var exceptionsClassPath = ClassPathHelper.CoreExceptionClassPath(solutionDirectory, "", projectBaseName);
+            var exceptionsClassPath = ClassPathHelper.ExceptionsClassPath(solutionDirectory, "", projectBaseName);
             var contextClassPath = ClassPathHelper.DbContextClassPath(solutionDirectory, "", projectBaseName);
             var wrapperClassPath = ClassPathHelper.WrappersClassPath(solutionDirectory, "", projectBaseName);
 
@@ -87,10 +87,7 @@
             public async Task<PagedList<{readDto}>> Handle({queryListName} request, CancellationToken cancellationToken)
             {{
                 if (request.QueryParameters == null)
-                {{
-                    // log error
                     throw new ApiException(""Invalid query parameters."");
-                }}
 
                 var collection = _db.{entity.Plural}
                     as IQueryable<{entity.Name}>;

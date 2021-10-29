@@ -36,11 +36,13 @@
                     else if (line.Contains($"// MassTransit Setup -- Do Not Delete Comment"))
                     {
                         newText += $@"
-            services.AddMassTransitInMemoryTestHarness(cfg =>
+            _provider = services.AddMassTransitInMemoryTestHarness(cfg =>
             {{
                 // Consumer Registration -- Do Not Delete Comment
-            }});
-            _harness = services.BuildServiceProvider().GetRequiredService<InMemoryTestHarness>();
+            }}).BuildServiceProvider();
+            _harness = _provider.GetRequiredService<InMemoryTestHarness>();
+
+            services.AddScoped(_ => Mock.Of<IPublishEndpoint>());
             await _harness.Start();";
                     }
                     else if (line.Contains($"using System;"))
@@ -66,7 +68,8 @@
                     else if (line.Contains($"private static Checkpoint _checkpoint;"))
                     {
                         newText += $@"
-        public static InMemoryTestHarness _harness;";
+        public static InMemoryTestHarness _harness;
+        public static ServiceProvider _provider;";
                     }
 
                     output.WriteLine(newText);

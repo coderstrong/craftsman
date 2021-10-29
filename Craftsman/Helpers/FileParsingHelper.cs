@@ -28,6 +28,14 @@
             return templatefromYaml;
         }
 
+        public static T ReadYamlString<T>(string yamlString)
+        {
+            var deserializer = new Deserializer();
+            T templatefromYaml = deserializer.Deserialize<T>(yamlString);
+
+            return templatefromYaml;
+        }
+
         public static T ReadJson<T>(string jsonFile)
         {
             return JsonConvert.DeserializeObject<T>(File.ReadAllText(jsonFile));
@@ -57,21 +65,21 @@
 
         public static void RunPrimaryKeyGuard(List<Entity> entities)
         {
-            if (entities.Where(e => e.PrimaryKeyProperty == null).ToList().Count > 0)
+            if (entities.Where(e => Entity.PrimaryKeyProperty == null).ToList().Count > 0)
                 throw new MissingPrimaryKeyException("One of your entity properties is missing a primary key designation. " +
                     "Please make sure you have an `IsPrimaryKey: true` option on whichever property you want to be used as your prmary key.");
         }
 
-        public static void RunSolutionNameAssignedGuard(string solutionName)
+        public static void RunSolutionNameAssignedGuard(string projectName)
         {
-            if (solutionName == null || solutionName.Length <= 0)
+            if (projectName == null || projectName.Length <= 0)
                 throw new InvalidSolutionNameException();
         }
 
-        public static void SolutionNameDoesNotEqualEntityGuard(string solutionName, List<Entity> entities)
+        public static void SolutionNameDoesNotEqualEntityGuard(string projectName, List<Entity> entities)
         {
-            if(entities.Where(e => e.Name == solutionName).ToList().Count > 0 
-                || entities.Where(e => e.Plural == solutionName).ToList().Count > 0
+            if(entities.Where(e => e.Name == projectName).ToList().Count > 0 
+                || entities.Where(e => e.Plural == projectName).ToList().Count > 0
             )
                 throw new SolutiuonNameEntityMatchException();
         }

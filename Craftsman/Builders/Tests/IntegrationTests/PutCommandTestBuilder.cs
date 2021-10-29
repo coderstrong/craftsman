@@ -38,7 +38,7 @@
             var fakeEntityVariableName = $"fake{entity.Name}One";
             var lowercaseEntityName = entity.Name.LowercaseFirstLetter();
             var lowercaseEntityPluralName = entity.Plural.LowercaseFirstLetter();
-            var pkName = entity.PrimaryKeyProperty.Name;
+            var pkName = Entity.PrimaryKeyProperty.Name;
             var lowercaseEntityPk = pkName.LowercaseFirstLetter();
 
             var testUtilClassPath = ClassPathHelper.IntegrationTestUtilitiesClassPath(solutionDirectory, projectBaseName, "");
@@ -73,7 +73,7 @@
     public class {commandName}Tests : TestBase
     {{
         [Test]
-        public async Task {commandName}_Updates_Existing_{entity.Name}_In_Db()
+        public async Task can_update_existing_{entity.Name.ToLower()}_in_db()
         {{
             // Arrange
             var {fakeEntityVariableName} = new {fakeEntity} {{ }}.Generate();

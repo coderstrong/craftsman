@@ -45,12 +45,10 @@ namespace Craftsman.Models
         }
 
         /// <summary>
-        /// The properties that are set to be a key. List of properties in case there is a composite key.
+        /// The primary key property of the entity. Always a guid
         /// </summary>
-        public EntityProperty PrimaryKeyProperty
-        {
-            get => Properties.Where(p => p.IsPrimaryKey).FirstOrDefault();
-        }
+        public static EntityProperty PrimaryKeyProperty => EntityProperty.GetPrimaryKey();
+            
 
         /// <summary>
         /// The custom table name that will be used in the database. Optional and null if they want to use default value.
@@ -61,5 +59,23 @@ namespace Craftsman.Models
         /// The database schema that will be used. Optional and null if they want to use default value
         /// </summary>
         public string Schema { get; set; }
+
+        private List<Feature> _features = new List<Feature>();
+        public List<Feature> Features
+        {
+            get => _features;
+            set
+            {
+                var entitylessFeatures = value ?? new List<Feature>();
+                _features = entitylessFeatures
+                    .Select(f =>
+                    {
+                        f.EntityName = Name;
+                        f.EntityPlural = Plural;
+                        return f;
+                    })
+                    .ToList();
+            }
+        }
     }
 }

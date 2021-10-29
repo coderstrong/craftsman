@@ -11,41 +11,63 @@
 
     public static class EntityBuilder
     {
-        public static void CreateEntity(string solutionDirectory, Entity entity, string projectBaseName, IFileSystem fileSystem)
+        public static void CreateEntity(string srcDirectory, Entity entity, string projectBaseName, IFileSystem fileSystem)
         {
-            var classPath = ClassPathHelper.EntityClassPath(solutionDirectory, $"{entity.Name}.cs", projectBaseName);
-
-            if (!fileSystem.Directory.Exists(classPath.ClassDirectory))
-                fileSystem.Directory.CreateDirectory(classPath.ClassDirectory);
-
-            if (fileSystem.File.Exists(classPath.FullClassPath))
-                throw new FileAlreadyExistsException(classPath.FullClassPath);
-
-            using (var fs = fileSystem.File.Create(classPath.FullClassPath))
-            {
-                var data = GetEntityFileText(classPath.ClassNamespace, entity);
-                fs.Write(Encoding.UTF8.GetBytes(data));
-            }
+            var classPath = ClassPathHelper.EntityClassPath(srcDirectory, $"{entity.Name}.cs", entity.Plural, projectBaseName);
+            var fileText = GetEntityFileText(classPath.ClassNamespace, srcDirectory, entity, projectBaseName);
+            Utilities.CreateFile(classPath, fileText, fileSystem);
+        }
+        
+        public static void CreateBaseEntity(string srcDirectory, string projectBaseName, IFileSystem fileSystem)
+        {
+            var classPath = ClassPathHelper.EntityClassPath(srcDirectory, $"BaseEntity.cs", "", projectBaseName);
+            var fileText = GetBaseEntityFileText(classPath.ClassNamespace);
+            Utilities.CreateFile(classPath, fileText, fileSystem);
         }
 
-        public static string GetEntityFileText(string classNamespace, Entity entity)
+        public static string GetEntityFileText(string classNamespace, string srcDirectory, Entity entity, string projectBaseName)
         {
             var propString = EntityPropBuilder(entity.Properties);
-            var usingSieve = entity.Properties.Where(e => e.CanFilter == true || e.CanSort == true).ToList().Count > 0 ? @$"{Environment.NewLine}    using Sieve.Attributes;" : "";
+            var usingSieve = entity.Properties.Where(e => e.CanFilter || e.CanSort).ToList().Count > 0 ? @$"{Environment.NewLine}    using Sieve.Attributes;" : "";
             var tableAnnotation = TableAnnotationBuilder(entity);
+            
+            var foreignEntityUsings = "";
+            var foreignProps = entity.Properties.Where(e => e.IsForeignKey).ToList();
+            foreach (var entityProperty in foreignProps)
+            {
+                var classPath = ClassPathHelper.EntityClassPath(srcDirectory, $"", entityProperty.ForeignEntityPlural, projectBaseName);
+                foreignEntityUsings += $@"
+    using {classPath.ClassNamespace};";
+            }
+
 
             return @$"namespace {classNamespace}
 {{
     using System;
     using System.ComponentModel.DataAnnotations;
-    using System.ComponentModel.DataAnnotations.Schema;{usingSieve}
+    using System.ComponentModel.DataAnnotations.Schema;{usingSieve}{foreignEntityUsings}
 
     {tableAnnotation}
-    public class {entity.Name}
+    public class {entity.Name} : BaseEntity
     {{
 {propString}
+    }}
+}}";
+        }
 
-        // add-on property marker - Do Not Delete This Comment
+        public static string GetBaseEntityFileText(string classNamespace)
+        {
+            return @$"namespace {classNamespace}
+{{
+    using System;
+    using System.ComponentModel.DataAnnotations;
+    using System.ComponentModel.DataAnnotations.Schema;
+
+    public abstract class BaseEntity
+    {{
+        [Key] 
+        [Column(""id"")]
+        public Guid Id {{ get; set; }} = Guid.NewGuid();
     }}
 }}";
         }
@@ -54,23 +76,20 @@
         {
             var tableName = entity.TableName ?? entity.Name;
 
-            if (entity.Schema != null)
-                return @$"[Table(""{tableName}"", Schema=""{entity.Schema}"")]";
-
-            return @$"[Table(""{tableName}"")]";
+            return entity.Schema != null ? @$"[Table(""{tableName}"", Schema=""{entity.Schema}"")]" : @$"[Table(""{tableName}"")]";
         }
 
         public static string EntityPropBuilder(List<EntityProperty> props)
         {
             var propString = "";
-            for (var eachProp = 0; eachProp < props.Count; eachProp++)
+            foreach (var property in props)
             {
-                var attributes = AttributeBuilder(props[eachProp]);
+                var attributes = AttributeBuilder(property);
                 propString += attributes;
-                string defaultValue = Utilities.GetDefaultValueText(props[eachProp].DefaultValue, props[eachProp].Type);
-
-                string newLine = eachProp == props.Count - 1 ? "" : $"{Environment.NewLine}{Environment.NewLine}";
-                propString += $@"        public {props[eachProp].Type} {props[eachProp].Name} {{ get; set; }}{defaultValue}{newLine}";
+                var defaultValue = Utilities.GetDefaultValueText(property.DefaultValue, property);
+                var newLine = property == props.LastOrDefault() ? "" : $"{Environment.NewLine}{Environment.NewLine}";
+                propString += $@"        public {property.Type} {property.Name} {{ get; set; }}{defaultValue}{newLine}";
+                propString += GetForeignProp(property);
             }
 
             return propString;
@@ -79,21 +98,22 @@
         private static string AttributeBuilder(EntityProperty entityProperty)
         {
             var attributeString = "";
-
-            if (entityProperty.IsPrimaryKey)
-            {
-                attributeString += @$"        [Key]{Environment.NewLine}";
-            }
             if (entityProperty.IsRequired)
                 attributeString += @$"        [Required]{Environment.NewLine}";
             if (entityProperty.IsForeignKey)
-                attributeString += @$"        [ForeignKey(""{entityProperty.ForeignKeyPropName}"")]{Environment.NewLine}";
+                attributeString += @$"        [ForeignKey(""{entityProperty.ForeignEntityName}"")]{Environment.NewLine}";
             if (entityProperty.CanFilter || entityProperty.CanSort)
                 attributeString += @$"        [Sieve(CanFilter = {entityProperty.CanFilter.ToString().ToLower()}, CanSort = {entityProperty.CanSort.ToString().ToLower()})]{Environment.NewLine}";
             if (!string.IsNullOrEmpty(entityProperty.ColumnName))
                 attributeString += @$"        [Column(""{entityProperty.ColumnName}"")]{Environment.NewLine}";
 
             return attributeString;
+        }
+
+        private static string GetForeignProp(EntityProperty prop)
+        {
+            return !string.IsNullOrEmpty(prop.ForeignEntityName) ? $@"
+        public {prop.ForeignEntityName} {prop.ForeignEntityName} {{ get; set; }}" : "";
         }
     }
 }

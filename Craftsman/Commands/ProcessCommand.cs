@@ -6,9 +6,11 @@
     using Craftsman.Models;
     using RestSharp;
     using System;
+    using System.Collections.Generic;
     using System.IO.Abstractions;
     using System.Linq;
     using System.Reflection;
+    using System.Runtime.InteropServices;
     using System.Text;
     using static Helpers.ConsoleWriter;
 
@@ -18,7 +20,13 @@
 
         public void Run(string[] args)
         {
-            Console.OutputEncoding = Encoding.Unicode;
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                // this makes emojis come up more reliably. might get built into spectre better in the future, so give a go deleting this at some point
+                // they seem to show up fine on osx and actually need this to be off to work there
+                Console.OutputEncoding = Encoding.Unicode;
+            }
+            
             var myEnv = Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT");
 
             if (args.Length == 0)
@@ -62,6 +70,25 @@
                 }
             }
 
+            if (args.Length >= 2 && (args[0] == "add:authserver"))
+            {
+                var filePath = args[1];
+                if (filePath == "-h" || filePath == "--help")
+                    AddAuthServerCommand.Help();
+                else
+                {
+                    CheckForLatestVersion();
+
+                    var rootDir = fileSystem.Directory.GetCurrentDirectory();
+                    if (myEnv == "Dev")
+                    {
+                        Console.WriteLine("Enter the root directory.");
+                        rootDir = Console.ReadLine();
+                    }
+                    AddAuthServerCommand.Run(filePath, rootDir, fileSystem);
+                }
+            }
+
             if (args.Length >= 2 && (args[0] == "new:domain"))
             {
                 var filePath = args[1];
@@ -79,6 +106,24 @@
                         rootDir = Console.ReadLine();
                     }
                     NewDomainProjectCommand.Run(filePath, rootDir, fileSystem, verbosity);
+                }
+            }
+            
+            if ((args[0] == "new:example" || args[0] == "example"))
+            {
+                if (args.Length > 1 && (args[1] == "-h" || args[1] == "--help"))
+                    NewExampleCommand.Help();
+                else
+                {
+                    CheckForLatestVersion();
+
+                    var rootDir = fileSystem.Directory.GetCurrentDirectory();
+                    if (myEnv == "Dev")
+                    {
+                        Console.WriteLine("Enter the root directory.");
+                        rootDir = Console.ReadLine();
+                    }
+                    NewExampleCommand.Run(rootDir, fileSystem);
                 }
             }
 
@@ -100,40 +145,6 @@
                     }
 
                     AddEntityCommand.Run(filePath, solutionDir, fileSystem, verbosity);
-                }
-            }
-
-            if (args.Length > 1 && (args[0] == "add:property" || args[0] == "add:prop"))
-            {
-                if (args[1] == "-h" || args[1] == "--help")
-                    AddEntityPropertyCommand.Help();
-                else
-                {
-                    CheckForLatestVersion();
-
-                    var entityName = "";
-                    var newProperty = new EntityProperty();
-                    Parser.Default.ParseArguments<AddPropertyOptions>(args)
-                        .WithParsed(options =>
-                        {
-                            entityName = options.Entity.UppercaseFirstLetter();
-                            newProperty = new EntityProperty()
-                            {
-                                Name = options.Name,
-                                Type = options.Type,
-                                CanFilter = options.CanFilter,
-                                CanSort = options.CanSort,
-                                ForeignKeyPropName = options.ForeignKeyPropName
-                            };
-                        });
-
-                    var solutionDir = fileSystem.Directory.GetCurrentDirectory();
-                    if (myEnv == "Dev")
-                    {
-                        Console.WriteLine("Enter the solution directory.");
-                        solutionDir = Console.ReadLine();
-                    }
-                    AddEntityPropertyCommand.Run(solutionDir, entityName, newProperty);
                 }
             }
 
@@ -225,7 +236,7 @@
                 if (args.Length > 1)
                 {
                     var filePath = args[1];
-                    if (filePath == "-h" || filePath == "--help")
+                    if (filePath is "-h" or "--help")
                         AddFeatureCommand.Help();
 
                     return;

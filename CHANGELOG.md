@@ -11,12 +11,121 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 ### Added
 
+* Added BaseEntity that all entities will inherit from.
+  * TODO: docs
+* Added built in features to the `add:feature` command
+* New `AddListByFk` option for the `add:feature`  command and `Feature` property of an entity.
+  * TODO: docs
+* New `craftsman example` or `craftsman new:example` command to create an example project with a prompted workflow to select. `Basic`, `WithAuth`, `AuthServer`, `WithBus`
+* Added `.DS_Store` and `.env` to gitignore
+* Added Consumer test
+* Added `provider` to test fixture when adding a bus
+* Added a mock `IPublishEndpoint` service to `TestFixture` when using MassTransit
+  * update docs that mediatr handler tests aren't broken when pubilshing anymore
+* New policies added to swagger on `add:entity` scaffolding
+* New `add:authserver` command as well as an `AuthServer` option when creating a domain
+  * TODO DOCS
+    * only supports scaffolding for one scope (for now) -- they can still be added manually if you need multiple!
+    * No consent support (yet)
+
+### Updated
+
+* Moved Policies to Feature
+  * TODO: docs
+  
+* There is no more primary key property. A Guid with a name `Id` will be inherited by all entities.
+
+* Docker utilities for integration test refactored to use Fluent Docker wherever possible for better readability. Some enhancements were made as well (e.g. better container/volume naming, proper volume mounting).
+
+* Cleaned up test names
+
+* Added `Secret` back to Environment options
+
+* Updated FK support to better API
+
+  * TODO: docs -- `ForeignEntityPlural` defaults to `s` suffix if not provided
+
+    ```yaml
+        Properties:
+          - Name: EventId
+            Type: Guid
+            ColumnName: event_id
+            ForeignEntityName: Event
+            ForeignEntityPlural: Events
+    ```
+    
+    Can not have fk in manipulation DTO. will need to add manually and adjust feature accordingly (currently assumes it's from query param)
+    
+    > TODO: add `RelationshipToParentEntity` to allow for appropriate prop to be added to entity (`Many` adds a list with a prop using the plural, Single adds a prop with a singular type and name)
+
+### Fixed
+
+- Removed the broken patch validation from command
+- No more `409` produced response annotation on POST
+- Descending sort tests now actually test desc instead of mirroring asc
+- Removed error handler comments in controller
+- Empty controller no longer added when no features present (fixes #40)
+- Messages project will be properly referenced when using a bus
+- Swagger policies won't get duplicates
+
+## [0.11.2] - TBD
+
+### Fixed
+
+- Better variable name on delete integ test
+
+## [0.11.1] - 2021-08-23
+
+### Fixed
+
+- Removed extra parentheses on endpoint names
+
+## [0.11.0] - 2021-08-22
+
+### Added
+
 - Added an `add:feature` command (also works with `new:feature`)
+- Non-nullable guids will now have a default of `Guid.NewGuid()` unless otherwise specified
+- Added XML docs to release in csproj
+- Added a new `features` option to entities to allow for granular feature control. The accepted values are `AdHoc`, `GetRecord`, `GetList`, `DeleteRecord`, `UpdateRecord`, `PatchRecord`, `AddRecord`, and `CreateRecord` (same as `AddRecord` but available as an alias in case you can't remember!)
+
+### Changed
+
+- Instead of 3 BC projects (Core, Infra, Api) there will now be one. This helps with colocation and does force premature optimization for something like a model library and a heavily separated infra project.
+  - Features dir changed to Domain with a features directory inside of it
+  - Entities live on their respective entity folder in the domain with their feature
+  - Removed the `webapi` suffix on the api project
+  - Core directories moved to web api
+  - `Contexts` dir changed to `Databases`
+- Removed save successful checks on add and update commands
+- Added better naming to PUT command variables
+- Guid PKs will no longer be added to the creation DTO
+- POST commands will no longer have a conflict check since you can't add a PK anymore
+- A conflict integration test will not be added anymore
+- `NoKeyGenerated` commands are no longer in dbcontext
+- Controller url all lowercase
+- Swagger comments on by default
+- 409 no longer shown on swagegr comments for POST
+- No more save successful check on delete command
+- Seeders have a sub `DummyData` directory
+- Sieve service registration moved to webapi service class
+- `SolutionName` to `ProjectName`
 
 ### Fixed
 
 - Seeder indentation in startup fixed
 - PUT commands will no longer throw 500 when entity is not modified (#31)
+- Route indentation fixed
+- Removed annoying comments from features
+- Fixed test name for basic gets in functional tests
+- Seeders in startup will newline when there are multiple entities
+- Unicode now onlyenforced on windows (for better emoji support)
+- Fixed `isRequired` property
+- Command prop for `Update` command has proper casing
+
+### Removed
+
+- Removed the `add:property` cli command
 
 ## [0.10.0] - 2021-05-31
 
@@ -47,6 +156,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 * Updated nuget packages
 * Updated `Program.cs` to async
 * Changed migrations to happen after all bounded contexts are added
+* Removed the custom fluent validation boilderplate from the add, update, patch, and ad hoc commands
 
 ### Removed
 

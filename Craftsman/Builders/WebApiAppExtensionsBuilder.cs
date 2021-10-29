@@ -26,9 +26,9 @@
             }
         }
 
-        public static string GetErrorHandlerAppExtensionText(string classNamespace, string solutionDirectory, string solutionName)
+        public static string GetErrorHandlerAppExtensionText(string classNamespace, string solutionDirectory, string projectName)
         {
-            var webApiClassPath = ClassPathHelper.WebApiMiddlewareClassPath(solutionDirectory, "", solutionName);
+            var webApiClassPath = ClassPathHelper.WebApiMiddlewareClassPath(solutionDirectory, "", projectName);
             return @$"namespace {classNamespace}
 {{
     using Microsoft.AspNetCore.Builder;
@@ -83,6 +83,7 @@
         {
             var swaggerAuth = addJwtAuthentication ? $@"
                 config.OAuthClientId(configuration[""JwtSettings:ClientId""]);
+                config.OAuthClientSecret(configuration[""JwtSettings:ClientSecret""]);
                 config.OAuthUsePkce();" : "";
 
             var swaggerText = $@"public static void UseSwaggerExtension(this IApplicationBuilder app, IConfiguration configuration)

@@ -8,9 +8,9 @@
 
     public class CommandDeleteRecordBuilder
     {
-        public static void CreateCommand(string solutionDirectory, Entity entity, string contextName, string projectBaseName)
+        public static void CreateCommand(string srcDirectory, Entity entity, string contextName, string projectBaseName)
         {
-            var classPath = ClassPathHelper.FeaturesClassPath(solutionDirectory, $"{Utilities.DeleteEntityFeatureClassName(entity.Name)}.cs", entity.Plural, projectBaseName);
+            var classPath = ClassPathHelper.FeaturesClassPath(srcDirectory, $"{Utilities.DeleteEntityFeatureClassName(entity.Name)}.cs", entity.Plural, projectBaseName);
 
             if (!Directory.Exists(classPath.ClassDirectory))
                 Directory.CreateDirectory(classPath.ClassDirectory);
@@ -21,24 +21,24 @@
             using (FileStream fs = File.Create(classPath.FullClassPath))
             {
                 var data = "";
-                data = GetCommandFileText(classPath.ClassNamespace, entity, contextName, solutionDirectory, projectBaseName);
+                data = GetCommandFileText(classPath.ClassNamespace, entity, contextName, srcDirectory, projectBaseName);
                 fs.Write(Encoding.UTF8.GetBytes(data));
             }
         }
 
-        public static string GetCommandFileText(string classNamespace, Entity entity, string contextName, string solutionDirectory, string projectBaseName)
+        public static string GetCommandFileText(string classNamespace, Entity entity, string contextName, string srcDirectory, string projectBaseName)
         {
             var className = Utilities.DeleteEntityFeatureClassName(entity.Name);
             var deleteCommandName = Utilities.CommandDeleteName(entity.Name);
 
-            var primaryKeyPropType = entity.PrimaryKeyProperty.Type;
-            var primaryKeyPropName = entity.PrimaryKeyProperty.Name;
+            var primaryKeyPropType = Entity.PrimaryKeyProperty.Type;
+            var primaryKeyPropName = Entity.PrimaryKeyProperty.Name;
             var entityNameLowercase = entity.Name.LowercaseFirstLetter();
 
-            var entityClassPath = ClassPathHelper.EntityClassPath(solutionDirectory, "", projectBaseName);
-            var dtoClassPath = ClassPathHelper.DtoClassPath(solutionDirectory, "", entity.Name, projectBaseName);
-            var exceptionsClassPath = ClassPathHelper.CoreExceptionClassPath(solutionDirectory, "", projectBaseName);
-            var contextClassPath = ClassPathHelper.DbContextClassPath(solutionDirectory, "", projectBaseName);
+            var entityClassPath = ClassPathHelper.EntityClassPath(srcDirectory, "", entity.Plural, projectBaseName);
+            var dtoClassPath = ClassPathHelper.DtoClassPath(srcDirectory, "", entity.Name, projectBaseName);
+            var exceptionsClassPath = ClassPathHelper.ExceptionsClassPath(srcDirectory, "", projectBaseName);
+            var contextClassPath = ClassPathHelper.DbContextClassPath(srcDirectory, "", projectBaseName);
 
             return @$"namespace {classNamespace}
 {{
@@ -80,25 +80,14 @@
 
             public async Task<bool> Handle({deleteCommandName} request, CancellationToken cancellationToken)
             {{
-                // add logger (and a try catch with logger so i can cap the unexpected info)........ unless this happens in my logger decorator that i am going to add?
-
                 var recordToDelete = await _db.{entity.Plural}
                     .FirstOrDefaultAsync({entity.Lambda} => {entity.Lambda}.{primaryKeyPropName} == request.{primaryKeyPropName});
 
                 if (recordToDelete == null)
-                {{
-                    // log error
                     throw new KeyNotFoundException();
-                }}
 
                 _db.{entity.Plural}.Remove(recordToDelete);
-                var saveSuccessful = await _db.SaveChangesAsync() > 0;
-
-                if (!saveSuccessful)
-                {{
-                    // add log
-                    throw new Exception(""Unable to save the new record. Please check the logs for more information."");
-                }}
+                await _db.SaveChangesAsync();
 
                 return true;
             }}

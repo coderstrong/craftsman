@@ -10,8 +10,11 @@
     using System;
     using System.Collections.Generic;
     using System.Diagnostics;
+    using System.Diagnostics.Tracing;
     using System.IO;
+    using System.IO.Abstractions;
     using System.Linq;
+    using System.Text;
     using static Helpers.ConsoleWriter;
 
     public class Utilities
@@ -60,35 +63,16 @@
                 throw new SolutionNotFoundException();
         }
 
-        public static string CreateApiRouteClasses(List<Entity> entities)
-        {
-            var entityRouteClasses = "";
-
-            foreach (var entity in entities)
-            {
-                var lowercaseEntityPluralName = entity.Plural.LowercaseFirstLetter();
-                var pkName = entity.PrimaryKeyProperty.Name;
-
-                entityRouteClasses += $@"{Environment.NewLine}{Environment.NewLine}public static class {entity.Plural}
-        {{
-            public const string {pkName} = ""{{{pkName.LowercaseFirstLetter()}}}"";
-            public const string GetList = Base + ""/{lowercaseEntityPluralName}"";
-            public const string GetRecord = Base + ""/{lowercaseEntityPluralName}/"" + {pkName};
-            public const string Create = Base + ""/{lowercaseEntityPluralName}"";
-            public const string Delete = Base + ""/{lowercaseEntityPluralName}/"" + {pkName};
-            public const string Put = Base + ""/{lowercaseEntityPluralName}/"" + {pkName};
-            public const string Patch = Base + ""/{lowercaseEntityPluralName}/"" + {pkName};
-        }}";
-            }
-
-            return entityRouteClasses;
-        }
-
         public static string GetRepositoryName(string entityName, bool isInterface)
         {
             return isInterface ? $"I{entityName}Repository" : $"{entityName}Repository";
         }
 
+        public static string GetApiRouteClass(string entityPlural)
+        {
+            return entityPlural;
+        }
+        
         public static string GetWebHostFactoryName()
         {
             return "TestingWebApplicationFactory";
@@ -112,6 +96,34 @@
         public static string GetMassTransitRegistrationName()
         {
             return "MassTransitServiceExtension";
+        }
+
+        public static string GetInfraRegistrationName()
+        {
+            return "InfrastructureServiceExtension";
+        }
+
+        public static string GetSwaggerServiceExtensionName()
+        {
+            return "SwaggerServiceExtension";
+        }
+
+        public static List<Policy> GetPoliciesThatDoNotExist(List<Policy> policies, string existingFileFullClassPath)
+        {
+            var nonExistantPolicies = new List<Policy>();
+            nonExistantPolicies.AddRange(policies);
+
+            var fileText = File.ReadAllText(existingFileFullClassPath);
+
+            foreach (var policy in policies)
+            {
+                if (fileText.Contains(policy.Name) || fileText.Contains(policy.PolicyValue))
+                {
+                    nonExistantPolicies.Remove(policy);
+                }
+            }
+
+            return nonExistantPolicies;
         }
 
         public static string GetAppSettingsName(string envName, bool asJson = true)
@@ -294,10 +306,10 @@
 
         public static string EndpointBaseGenerator(string entityNamePlural)
         {
-            return $@"api/{entityNamePlural}";
+            return $@"api/{entityNamePlural.ToLower()}";
         }
 
-        public static string PolicyStringBuilder(Policy policy)
+        public static string PolicyInfraStringBuilder(Policy policy)
         {
             if (policy.PolicyType == Enum.GetName(typeof(PolicyType), PolicyType.Scope))
             {
@@ -317,24 +329,32 @@
                     policy => policy.RequireClaim(""{policy.PolicyValue}""));";
         }
 
-        public static string BuildTestAuthorizationString(List<Policy> policies, List<Endpoint> endpoints, string entityName, PolicyType policyType)
+        public static object GetSwaggerPolicies(IEnumerable<Policy> policies)
         {
-            var endpointStrings = new List<string>();
-            foreach (var endpoint in endpoints)
+            var policyStrings = "";
+
+            //var uniquePolicies = policies.DistinctBy(); //TODO use with .net6
+            var uniquePolicies = policies
+                .GroupBy(p => new {p.Name, p.PolicyValue, p.PolicyType} )
+                .Select(g => g.First())
+                .ToList();
+            foreach (var policy in uniquePolicies)
             {
-                endpointStrings.Add(Enum.GetName(typeof(Endpoint), endpoint));
+                policyStrings += $@"
+                                {{ ""{policy.PolicyValue}"",""{policy.Name}"" }},";
             }
 
-            var results = policies
-                .Where(p => p.EndpointEntities.Any(ee => ee.EntityName == entityName)
-                    && p.EndpointEntities.Any(ee => ee.RestrictedEndpoints.Intersect(endpointStrings).Any()));
+            return policyStrings;
+        }
 
-            return "{\"" + string.Join("\", \"", results.Select(r => r.PolicyValue)) + "\"}";
+        public static string BuildTestAuthorizationString(List<Policy> policies, List<Endpoint> endpoints, string entityName, PolicyType policyType)
+        {
+            return "{\"" + string.Join("\", \"", policies.Select(r => r.PolicyValue)) + "\"}";
         }
 
         public static void AddStartupEnvironmentsWithServices(
             string solutionDirectory,
-            string solutionName,
+            string projectName,
             string dbName,
             List<ApiEnvironment> environments,
             SwaggerConfig swaggerConfig,
@@ -344,10 +364,10 @@
         {
             // add a development environment by default for local work if none exists
             if (environments.Where(e => e.EnvironmentName == "Development").Count() == 0)
-                environments.Add(new ApiEnvironment { EnvironmentName = "Development", ProfileName = $"{solutionName} (Development)" });
+                environments.Add(new ApiEnvironment { EnvironmentName = "Development", ProfileName = $"{projectName} (Development)" });
 
             if (environments.Where(e => e.EnvironmentName == "Production").Count() == 0)
-                environments.Add(new ApiEnvironment { EnvironmentName = "Production", ProfileName = $"{solutionName} (Production)" });
+                environments.Add(new ApiEnvironment { EnvironmentName = "Production", ProfileName = $"{projectName} (Production)" });
 
             var sortedEnvironments = environments.OrderBy(e => e.EnvironmentName == "Development" ? 1 : 0).ToList(); // sets dev as default profile
             foreach (var env in sortedEnvironments)
@@ -356,7 +376,7 @@
                 if (env.EnvironmentName != "Production")
                     StartupBuilder.CreateWebApiStartup(solutionDirectory, env.EnvironmentName, useJwtAuth, projectBaseName);
 
-                WebApiAppSettingsBuilder.CreateAppSettings(solutionDirectory, env, dbName, projectBaseName);
+                AppSettingsBuilder.CreateWebApiAppSettings(solutionDirectory, env, dbName, projectBaseName);
                 WebApiLaunchSettingsModifier.AddProfile(solutionDirectory, env, port, projectBaseName);
 
                 //services
@@ -366,15 +386,7 @@
 
             // add an integration testing env to make sure that an in memory database is used
             var functionalEnv = new ApiEnvironment() { EnvironmentName = "FunctionalTesting" };
-            WebApiAppSettingsBuilder.CreateAppSettings(solutionDirectory, functionalEnv, "", projectBaseName);
-        }
-
-        public static List<Policy> GetEndpointPolicies(List<Policy> policies, Endpoint endpoint, string entityName)
-        {
-            return policies
-                .Where(p => p.EndpointEntities.Any(ee => ee.EntityName == entityName)
-                    && p.EndpointEntities.Any(ee => ee.RestrictedEndpoints.Any(re => re == Enum.GetName(typeof(Endpoint), endpoint))))
-                .ToList();
+            AppSettingsBuilder.CreateWebApiAppSettings(solutionDirectory, functionalEnv, "", projectBaseName);
         }
 
         public static string GetForeignKeyIncludes(Entity entity)
@@ -386,6 +398,18 @@
             }
 
             return fkIncludes;
+        }
+
+        public static void CreateFile(ClassPath classPath, string fileText, IFileSystem fileSystem)
+        {
+            if (!fileSystem.Directory.Exists(classPath.ClassDirectory))
+                fileSystem.Directory.CreateDirectory(classPath.ClassDirectory);
+
+            if (fileSystem.File.Exists(classPath.FullClassPath))
+                throw new FileAlreadyExistsException(classPath.FullClassPath);
+
+            using var fs = fileSystem.File.Create(classPath.FullClassPath);
+            fs.Write(Encoding.UTF8.GetBytes(fileText));
         }
 
         public static void GitSetup(string solutionDirectory)
@@ -462,10 +486,14 @@
                 while (null != (line = input.ReadLine()))
                 {
                     var newText = $"{line}";
-                    if (line.Contains($"ProjectReference") && !projectAdded)
+                    if (line.Contains($"</Project>") && !projectAdded)
                     {
-                        newText += @$"
-    <ProjectReference Include=""{relativeProjectPath}"" />";
+                        newText = @$"
+  <ItemGroup>
+    <ProjectReference Include=""{relativeProjectPath}"" />
+  </ItemGroup>
+
+{newText}";
                         projectAdded = true;
                     }
 
@@ -478,20 +506,33 @@
             File.Move(tempPath, classPath.FullClassPath);
         }
 
-        public static string GetDefaultValueText(string defaultValue, string propType)
+        public static string GetDefaultValueText(string defaultValue, EntityProperty prop)
         {
-            if (propType == "string")
+            if (prop.Type == "string")
                 return defaultValue == null ? "" : @$" = ""{defaultValue}"";";
 
-            return defaultValue == null ? "" : $" = {defaultValue};";
+            if ((prop.Type.IsGuidPropertyType() && !prop.Type.Contains("?") && !prop.IsForeignKey))
+                return !string.IsNullOrEmpty(defaultValue) ? @$" = Guid.Parse(""{defaultValue}"");" : @" = Guid.NewGuid();";
+            
+            return string.IsNullOrEmpty(defaultValue) ? "" : $" = {defaultValue};";
         }
 
         public static string GetDbContext(string srcDirectory, string projectBaseName)
         {
             var classPath = ClassPathHelper.DbContextClassPath(srcDirectory, $"", projectBaseName);
-            var contextClass = Directory.GetFiles(classPath.FullClassPath, "*.cs").FirstOrDefault();
+            var directoryClasses = Directory.GetFiles(classPath.FullClassPath, "*.cs");
+            foreach (var directoryClass in directoryClasses)
+            {
+                using var input = File.OpenText(directoryClass);
+                string line;
+                while (null != (line = input.ReadLine()))
+                {
+                    if (line.Contains($": DbContext"))
+                        return Path.GetFileNameWithoutExtension(directoryClass);
+                }
+            }
 
-            return Path.GetFileNameWithoutExtension(contextClass);
+            return "";
         }
 
         public static string GetRandomId(string idType)
@@ -502,27 +543,23 @@
             if (idType.Equals("guid", StringComparison.InvariantCultureIgnoreCase))
                 return @$"Guid.NewGuid()";
 
-            if (idType.Equals("int", StringComparison.InvariantCultureIgnoreCase))
-                return @$"84709321";
-
-            return "";
+            return idType.Equals("int", StringComparison.InvariantCultureIgnoreCase) ? @$"84709321" : "";
         }
 
         private static bool RunDbMigration(ApiTemplate template, string srcDirectory)
         {
-            var webApiProjectClassPath = ClassPathHelper.WebApiProjectClassPath(srcDirectory, template.SolutionName);
-            var infraProjectClassPath = ClassPathHelper.InfrastructureProjectClassPath(srcDirectory, template.SolutionName);
+            var webApiProjectClassPath = ClassPathHelper.WebApiProjectClassPath(srcDirectory, template.ProjectName);
 
             return ExecuteProcess(
                 "dotnet",
-                @$"ef migrations add ""InitialMigration"" --project ""{infraProjectClassPath.FullClassPath}"" --startup-project ""{webApiProjectClassPath.FullClassPath}"" --output-dir Migrations",
+                @$"ef migrations add ""InitialMigration"" --project ""{webApiProjectClassPath.FullClassPath}""",
                 srcDirectory,
                 new Dictionary<string, string>()
                 {
                     { "ASPNETCORE_ENVIRONMENT", Guid.NewGuid().ToString() } // guid to not conflict with any given envs
                 },
                 20000,
-                $"{Emoji.Known.Warning} {template.SolutionName} Database Migrations timed out and will need to be run manually");
+                $"{Emoji.Known.Warning} {template.ProjectName} Database Migrations timed out and will need to be run manually");
         }
 
         public static void RunDbMigrations(List<ApiTemplate> boundedContexts, string domainDirectory)
@@ -534,15 +571,36 @@
                 {
                     foreach (var bc in boundedContexts)
                     {
-                        var bcDirectory = $"{domainDirectory}{Path.DirectorySeparatorChar}{bc.SolutionName}";
+                        var bcDirectory = $"{domainDirectory}{Path.DirectorySeparatorChar}{bc.ProjectName}";
                         var srcDirectory = Path.Combine(bcDirectory, "src");
 
                         ctx.Spinner(Spinner.Known.Dots2);
-                        ctx.Status($"[bold blue]Running {bc.SolutionName} Database Migrations [/]");
+                        ctx.Status($"[bold blue]Running {bc.ProjectName} Database Migrations [/]");
                         if (Utilities.RunDbMigration(bc, srcDirectory))
-                            WriteLogMessage($"Database Migrations for {bc.SolutionName} were successful");
+                            WriteLogMessage($"Database Migrations for {bc.ProjectName} were successful");
                     }
                 });
+        }
+        
+        public static string CreateApiRouteClasses(Entity entity)
+        {
+            var entityRouteClasses = "";
+
+            var lowercaseEntityPluralName = entity.Plural.LowercaseFirstLetter();
+            var pkName = Entity.PrimaryKeyProperty.Name;
+
+            entityRouteClasses += $@"{Environment.NewLine}{Environment.NewLine}        public static class {entity.Plural}
+        {{
+            public const string {pkName} = ""{{{pkName.LowercaseFirstLetter()}}}"";
+            public const string GetList = Base + ""/{lowercaseEntityPluralName}"";
+            public const string GetRecord = Base + ""/{lowercaseEntityPluralName}/"" + {pkName};
+            public const string Create = Base + ""/{lowercaseEntityPluralName}"";
+            public const string Delete = Base + ""/{lowercaseEntityPluralName}/"" + {pkName};
+            public const string Put = Base + ""/{lowercaseEntityPluralName}/"" + {pkName};
+            public const string Patch = Base + ""/{lowercaseEntityPluralName}/"" + {pkName};
+        }}";
+
+            return entityRouteClasses;
         }
     }
 }
