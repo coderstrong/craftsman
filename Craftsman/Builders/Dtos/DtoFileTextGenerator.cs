@@ -6,12 +6,13 @@
     using Craftsman.Models.Interfaces;
     using System;
     using System.Collections.Generic;
+    using System.Linq;
 
     public static class DtoFileTextGenerator
     {
         public static string GetReadParameterDtoText(string solutionDirectory, string classNamespace, Entity entity, Dto dto, string projectBaseName)
         {
-            var sharedDtoClassPath = ClassPathHelper.SharedDtoClassPath(solutionDirectory, "", projectBaseName);
+            var sharedDtoClassPath = ClassPathHelper.SharedDtoClassPath(solutionDirectory, "");
 
             return @$"namespace {classNamespace}
 {{
@@ -27,8 +28,7 @@
 
         public static string GetDtoText(IClassPath dtoClassPath, Entity entity, Dto dto)
         {
-            var propString = dto is Dto.Read ? $@"
-        public Guid Id {{ get; set; }}" : "";
+            var propString = dto is Dto.Read ? $@"    public Guid Id {{ get; set; }}{Environment.NewLine}" : "";
             propString += DtoPropBuilder(entity.Properties, dto);
             if (dto is Dto.Update or Dto.Creation)
                 propString = "";
@@ -41,33 +41,26 @@
 
             return @$"namespace {dtoClassPath.ClassNamespace}
 {{
+    using System.Collections.Generic;
     using System;
-    using System.ComponentModel.DataAnnotations;
-    using System.ComponentModel.DataAnnotations.Schema;
 
     public {abstractString}class {Utilities.GetDtoName(entity.Name, dto)} {inheritanceString}
     {{
-{propString}
+    {propString}
     }}
 }}";
         }
-
-        public static string GetForeignKeyUsingStatements(ClassPath dtoClassPath, string fkUsingStatements, EntityProperty prop, Dto dto, string projectBaseName)
-        {
-            var dtoFileName = $"{Utilities.GetDtoName(prop.Type, dto)}.cs";
-            var fkClasspath = ClassPathHelper.DtoClassPath(dtoClassPath.SolutionDirectory, dtoFileName, prop.Type, projectBaseName);
-
-            fkUsingStatements += $"{Environment.NewLine}    using {fkClasspath.ClassNamespace};";
-
-            return fkUsingStatements;
-        }
-
+        
         public static string DtoPropBuilder(List<EntityProperty> props, Dto dto)
         {
             var propString = "";
             for (var eachProp = 0; eachProp < props.Count; eachProp++)
             {
                 if (!props[eachProp].CanManipulate && dto == Dto.Manipulation)
+                    continue;
+                if (props[eachProp].IsForeignKey && props[eachProp].IsMany)
+                    continue;
+                if (!props[eachProp].IsPrimativeType)
                     continue;
                 var guidDefault = dto == Dto.Creation && props[eachProp].Type.IsGuidPropertyType()
                     ? " = Guid.NewGuid();"

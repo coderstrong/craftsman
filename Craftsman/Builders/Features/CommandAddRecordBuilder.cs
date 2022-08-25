@@ -9,7 +9,7 @@
 
     public class CommandAddRecordBuilder
     {
-        public static void CreateCommand(string srcDirectory, Entity entity, string contextName, string projectBaseName)
+        public static void CreateCommand(string solutionDirectory, string srcDirectory, Entity entity, string contextName, string projectBaseName)
         {
             var classPath = ClassPathHelper.FeaturesClassPath(srcDirectory, $"{Utilities.AddEntityFeatureClassName(entity.Name)}.cs", entity.Plural, projectBaseName);
 
@@ -22,12 +22,12 @@
             using (FileStream fs = File.Create(classPath.FullClassPath))
             {
                 var data = "";
-                data = GetCommandFileText(classPath.ClassNamespace, entity, contextName, srcDirectory, projectBaseName);
+                data = GetCommandFileText(classPath.ClassNamespace, entity, contextName, solutionDirectory, srcDirectory, projectBaseName);
                 fs.Write(Encoding.UTF8.GetBytes(data));
             }
         }
 
-        public static string GetCommandFileText(string classNamespace, Entity entity, string contextName, string srcDirectory, string projectBaseName)
+        public static string GetCommandFileText(string classNamespace, Entity entity, string contextName, string solutionDirectory, string srcDirectory, string projectBaseName)
         {
             var className = Utilities.AddEntityFeatureClassName(entity.Name);
             var addCommandName = Utilities.CommandAddName(entity.Name);
@@ -42,61 +42,59 @@
             var newEntityProp = $"{entityNameLowercase}ToAdd";
 
             var entityClassPath = ClassPathHelper.EntityClassPath(srcDirectory, "", entity.Plural, projectBaseName);
-            var dtoClassPath = ClassPathHelper.DtoClassPath(srcDirectory, "", entity.Name, projectBaseName);
-            var exceptionsClassPath = ClassPathHelper.ExceptionsClassPath(srcDirectory, "", projectBaseName);
+            var dtoClassPath = ClassPathHelper.DtoClassPath(solutionDirectory, "", entity.Name, projectBaseName);
+            var exceptionsClassPath = ClassPathHelper.ExceptionsClassPath(srcDirectory, "");
             var contextClassPath = ClassPathHelper.DbContextClassPath(srcDirectory, "", projectBaseName);
             var validatorsClassPath = ClassPathHelper.ValidationClassPath(srcDirectory, "", entity.Plural, projectBaseName);
 
-            return @$"namespace {classNamespace}
+            return @$"namespace {classNamespace};
+
+using {entityClassPath.ClassNamespace};
+using {dtoClassPath.ClassNamespace};
+using {exceptionsClassPath.ClassNamespace};
+using {contextClassPath.ClassNamespace};
+using {validatorsClassPath.ClassNamespace};
+using AutoMapper;
+using AutoMapper.QueryableExtensions;
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+using System.Threading;
+using System.Threading.Tasks;
+
+public static class {className}
 {{
-    using {entityClassPath.ClassNamespace};
-    using {dtoClassPath.ClassNamespace};
-    using {exceptionsClassPath.ClassNamespace};
-    using {contextClassPath.ClassNamespace};
-    using {validatorsClassPath.ClassNamespace};
-    using AutoMapper;
-    using AutoMapper.QueryableExtensions;
-    using MediatR;
-    using Microsoft.EntityFrameworkCore;
-    using System;
-    using System.Threading;
-    using System.Threading.Tasks;
-    using System.Collections.Generic;
-
-    public static class {className}
+    public class {addCommandName} : IRequest<{readDto}>
     {{
-        public class {addCommandName} : IRequest<{readDto}>
-        {{
-            public {createDto} {commandProp} {{ get; set; }}
+        public {createDto} {commandProp} {{ get; set; }}
 
-            public {addCommandName}({createDto} {newEntityProp})
-            {{
-                {commandProp} = {newEntityProp};
-            }}
+        public {addCommandName}({createDto} {newEntityProp})
+        {{
+            {commandProp} = {newEntityProp};
+        }}
+    }}
+
+    public class Handler : IRequestHandler<{addCommandName}, {readDto}>
+    {{
+        private readonly {contextName} _db;
+        private readonly IMapper _mapper;
+
+        public Handler({contextName} db, IMapper mapper)
+        {{
+            _mapper = mapper;
+            _db = db;
         }}
 
-        public class Handler : IRequestHandler<{addCommandName}, {readDto}>
+        public async Task<{readDto}> Handle({addCommandName} request, CancellationToken cancellationToken)
         {{
-            private readonly {contextName} _db;
-            private readonly IMapper _mapper;
+            var {entityNameLowercase} = {entityName}.Create(request.{commandProp});
+            _db.{entity.Plural}.Add({entityNameLowercase});
 
-            public Handler({contextName} db, IMapper mapper)
-            {{
-                _mapper = mapper;
-                _db = db;
-            }}
+            await _db.SaveChangesAsync(cancellationToken);
 
-            public async Task<{readDto}> Handle({addCommandName} request, CancellationToken cancellationToken)
-            {{
-                var {entityNameLowercase} = _mapper.Map<{entityName}> (request.{commandProp});
-                _db.{entity.Plural}.Add({entityNameLowercase});
-
-                await _db.SaveChangesAsync();
-
-                return await _db.{entity.Plural}
-                    .ProjectTo<{readDto}>(_mapper.ConfigurationProvider)
-                    .FirstOrDefaultAsync({entity.Lambda} => {entity.Lambda}.{primaryKeyPropName} == {entityNameLowercase}.{primaryKeyPropName});
-            }}
+            return await _db.{entity.Plural}
+                .AsNoTracking()
+                .ProjectTo<{readDto}>(_mapper.ConfigurationProvider)
+                .FirstOrDefaultAsync({entity.Lambda} => {entity.Lambda}.{primaryKeyPropName} == {entityNameLowercase}.{primaryKeyPropName}, cancellationToken);
         }}
     }}
 }}";

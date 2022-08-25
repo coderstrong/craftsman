@@ -7,7 +7,7 @@
 
     public class GetRecordEndpointBuilder
     {
-        public static string GetEndpointTextForGetRecord(Entity entity, bool addSwaggerComments,List<Policy> policies)
+        public static string GetEndpointTextForGetRecord(Entity entity, bool addSwaggerComments, Feature feature)
         {
             var lowercasePrimaryKey = Entity.PrimaryKeyProperty.Name.LowercaseFirstLetter();
             var entityName = entity.Name;
@@ -16,22 +16,21 @@
             var primaryKeyProp = Entity.PrimaryKeyProperty;
             var queryRecordMethodName = Utilities.QueryRecordName(entityName);
             var pkPropertyType = primaryKeyProp.Type;
-            var singleResponse = $@"Response<{readDto}>";
+            var singleResponse = $@"{readDto}";
             var getRecordEndpointName = entity.Name == entity.Plural ? $@"Get{entityNamePlural}Record" : $@"Get{entity.Name}";
-            var getRecordAuthorizations = EndpointSwaggerCommentBuilders.BuildAuthorizations(policies);
+            var getRecordAuthorizations = feature.IsProtected ? EndpointSwaggerCommentBuilders.BuildAuthorizations(feature.PermissionName) : "";
 
 
             return @$"{EndpointSwaggerCommentBuilders.GetSwaggerComments_GetRecord(entity, addSwaggerComments, singleResponse, getRecordAuthorizations.Length > 0)}{getRecordAuthorizations}
-        [Produces(""application/json"")]
-        [HttpGet(""{{{lowercasePrimaryKey}}}"", Name = ""{getRecordEndpointName}"")]
-        public async Task<ActionResult<{readDto}>> Get{entityName}({pkPropertyType} {lowercasePrimaryKey})
-        {{
-            var query = new {Utilities.GetEntityFeatureClassName(entity.Name)}.{queryRecordMethodName}({lowercasePrimaryKey});
-            var queryResponse = await _mediator.Send(query);
+    [Produces(""application/json"")]
+    [HttpGet(""{{{lowercasePrimaryKey}}}"", Name = ""{getRecordEndpointName}"")]
+    public async Task<ActionResult<{readDto}>> Get{entityName}({pkPropertyType} {lowercasePrimaryKey})
+    {{
+        var query = new {Utilities.GetEntityFeatureClassName(entity.Name)}.{queryRecordMethodName}({lowercasePrimaryKey});
+        var queryResponse = await _mediator.Send(query);
 
-            var response = new {singleResponse}(queryResponse);
-            return Ok(response);
-        }}";
+        return Ok(queryResponse);
+    }}";
         }
     }
 }

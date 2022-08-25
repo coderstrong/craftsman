@@ -33,25 +33,25 @@
             return @$"<Project Sdk=""Microsoft.NET.Sdk"">
 
   <PropertyGroup>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
 
     <IsPackable>false</IsPackable>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include=""AutoBogus"" Version=""2.13.0"" />
-    <PackageReference Include=""Bogus"" Version=""33.0.2"" />
-    <PackageReference Include=""Docker.DotNet"" Version=""3.125.4"" />
-    <PackageReference Include=""Ductus.FluentDocker"" Version=""2.10.7"" />
-    <PackageReference Include=""FluentAssertions"" Version=""5.10.3"" />
-    <PackageReference Include=""Microsoft.AspNetCore.Mvc.Testing"" Version=""5.0.6"" />
+    <PackageReference Include=""AutoBogus"" Version=""2.13.1"" />
+    <PackageReference Include=""Bogus"" Version=""34.0.1"" />
+    <PackageReference Include=""Docker.DotNet"" Version=""3.125.5"" />
+    <PackageReference Include=""Ductus.FluentDocker"" Version=""2.10.41"" />
+    <PackageReference Include=""FluentAssertions"" Version=""6.2.0"" />
     <PackageReference Include=""MediatR"" Version=""9.0.0"" />
+    <PackageReference Include=""Microsoft.AspNetCore.Mvc.Testing"" Version=""6.0.0"" />
     <PackageReference Include=""Moq"" Version=""4.16.1"" />
-    <PackageReference Include=""Npgsql"" Version=""5.0.5"" />
-    <PackageReference Include=""Newtonsoft.Json"" Version=""13.0.1"" />
+    <PackageReference Include=""Npgsql"" Version=""6.0.0"" />
     <PackageReference Include=""NUnit"" Version=""3.13.2"" />
-    <PackageReference Include=""NUnit3TestAdapter"" Version=""3.17.0"" />
-    <PackageReference Include=""Microsoft.NET.Test.Sdk"" Version=""16.9.4"" />
+    <PackageReference Include=""NUnit3TestAdapter"" Version=""4.1.0"" />
+    <PackageReference Include=""Microsoft.NET.Test.Sdk"" Version=""17.0.0"" />
     <PackageReference Include=""Respawn"" Version=""4.0.0"" />
   </ItemGroup>
 

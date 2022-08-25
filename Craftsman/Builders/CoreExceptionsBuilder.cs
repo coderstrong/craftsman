@@ -3,115 +3,87 @@
     using Craftsman.Exceptions;
     using Craftsman.Helpers;
     using System.IO;
+    using System.IO.Abstractions;
     using System.Text;
 
     public class CoreExceptionsBuilder
     {
-        public static void CreateExceptions(string solutionDirectory, string projectBaseName)
+        public static void CreateExceptions(string solutionDirectory, string projectBaseName, IFileSystem fileSystem)
         {
-            // ****this class path will have an invalid FullClassPath. just need the directory
-            var classPath = ClassPathHelper.ExceptionsClassPath(solutionDirectory, "", projectBaseName);
+            var classPath = ClassPathHelper.ExceptionsClassPath(solutionDirectory, "");
 
             if (!Directory.Exists(classPath.ClassDirectory))
                 Directory.CreateDirectory(classPath.ClassDirectory);
 
-            CreateApiException(solutionDirectory, projectBaseName);
-            CreateValidationException(solutionDirectory, projectBaseName);
-            CreateConflictException(solutionDirectory, projectBaseName);
+            CreateNotFoundException(solutionDirectory, projectBaseName, fileSystem);
+            CreateValidationException(solutionDirectory, projectBaseName, fileSystem);
+            CreateForbiddenException(solutionDirectory, projectBaseName, fileSystem);
         }
 
-        public static void CreateConflictException(string solutionDirectory, string projectBaseName)
+        public static void CreateValidationException(string solutionDirectory, string projectBaseName, IFileSystem fileSystem)
         {
-            var classPath = ClassPathHelper.ExceptionsClassPath(solutionDirectory, $"ConflictException.cs", projectBaseName);
-
-            if (!Directory.Exists(classPath.ClassDirectory))
-                Directory.CreateDirectory(classPath.ClassDirectory);
-
-            if (File.Exists(classPath.FullClassPath))
-                throw new FileAlreadyExistsException(classPath.FullClassPath);
-
-            using FileStream fs = File.Create(classPath.FullClassPath);
-            var data = "";
-            data = GetConflictExceptionFileText(classPath.ClassNamespace);
-            fs.Write(Encoding.UTF8.GetBytes(data));
+            var classPath = ClassPathHelper.ExceptionsClassPath(solutionDirectory, $"ValidationException.cs");
+            var fileText = GetValidationExceptionFileText(classPath.ClassNamespace);
+            Utilities.CreateFile(classPath, fileText, fileSystem);
         }
 
-        public static void CreateApiException(string solutionDirectory, string projectBaseName)
+        public static void CreateNotFoundException(string solutionDirectory, string projectBaseName, IFileSystem fileSystem)
         {
-            var classPath = ClassPathHelper.ExceptionsClassPath(solutionDirectory, $"ApiException.cs", projectBaseName);
-
-            if (!Directory.Exists(classPath.ClassDirectory))
-                Directory.CreateDirectory(classPath.ClassDirectory);
-
-            if (File.Exists(classPath.FullClassPath))
-                throw new FileAlreadyExistsException(classPath.FullClassPath);
-
-            using (FileStream fs = File.Create(classPath.FullClassPath))
-            {
-                var data = "";
-                data = GetApiExceptionFileText(classPath.ClassNamespace);
-                fs.Write(Encoding.UTF8.GetBytes(data));
-            }
+            var classPath = ClassPathHelper.ExceptionsClassPath(solutionDirectory, $"NotFoundException.cs");
+            var fileText = GetNotFoundExceptionFileText(classPath.ClassNamespace);
+            Utilities.CreateFile(classPath, fileText, fileSystem);
         }
 
-        public static string GetApiExceptionFileText(string classNamespace)
+        public static void CreateForbiddenException(string solutionDirectory, string projectBaseName, IFileSystem fileSystem)
+        {
+            var classPath = ClassPathHelper.ExceptionsClassPath(solutionDirectory, $"ForbiddenException.cs");
+            var fileText = GetForbiddenExceptionFileText(classPath.ClassNamespace);
+            Utilities.CreateFile(classPath, fileText, fileSystem);
+        }
+
+        public static string GetNotFoundExceptionFileText(string classNamespace)
         {
             return @$"namespace {classNamespace}
 {{
     using System;
-    using System.Globalization;
 
-    public class ApiException : Exception
+    public class NotFoundException : Exception
     {{
-        public ApiException() : base() {{ }}
+        public NotFoundException()
+            : base()
+        {{
+        }}
 
-        public ApiException(string message) : base(message) {{ }}
+        public NotFoundException(string message)
+            : base(message)
+        {{
+        }}
 
-        public ApiException(string message, params object[] args)
-            : base(string.Format(CultureInfo.CurrentCulture, message, args))
+        public NotFoundException(string message, Exception innerException)
+            : base(message, innerException)
+        {{
+        }}
+
+        public NotFoundException(string name, object key)
+            : base($""Entity \""{{name}}\"" ({{key}}) was not found."")
         {{
         }}
     }}
 }}";
         }
 
-        public static string GetConflictExceptionFileText(string classNamespace)
+        public static string GetForbiddenExceptionFileText(string classNamespace)
         {
             return @$"namespace {classNamespace}
 {{
     using System;
     using System.Globalization;
 
-    public class ConflictException : Exception
+    public class ForbiddenAccessException : Exception
     {{
-        public ConflictException() : base() {{ }}
-
-        public ConflictException(string message) : base(message) {{ }}
-
-        public ConflictException(string message, params object[] args)
-            : base(string.Format(CultureInfo.CurrentCulture, message, args))
-        {{
-        }}
+        public ForbiddenAccessException() : base() {{ }}
     }}
 }}";
-        }
-
-        public static void CreateValidationException(string solutionDirectory, string projectBaseName)
-        {
-            var classPath = ClassPathHelper.ExceptionsClassPath(solutionDirectory, $"ValidationException.cs", projectBaseName);
-
-            if (!Directory.Exists(classPath.ClassDirectory))
-                Directory.CreateDirectory(classPath.ClassDirectory);
-
-            if (File.Exists(classPath.FullClassPath))
-                throw new FileAlreadyExistsException(classPath.FullClassPath);
-
-            using (FileStream fs = File.Create(classPath.FullClassPath))
-            {
-                var data = "";
-                data = GetValidationExceptionFileText(classPath.ClassNamespace);
-                fs.Write(Encoding.UTF8.GetBytes(data));
-            }
         }
 
         public static string GetValidationExceptionFileText(string classNamespace)
@@ -119,24 +91,27 @@
             return @$"namespace {classNamespace}
 {{
     using FluentValidation.Results;
-    using System;
     using System.Collections.Generic;
+    using System.Linq;
+    using System;
 
     public class ValidationException : Exception
     {{
-        public ValidationException() : base(""One or more validation failures have occurred."")
+        public ValidationException()
+            : base(""One or more validation failures have occurred."")
         {{
-            Errors = new List<string>();
+            Errors = new Dictionary<string, string[]>();
         }}
-        public List<string> Errors {{ get; }}
+
         public ValidationException(IEnumerable<ValidationFailure> failures)
             : this()
         {{
-            foreach (var failure in failures)
-            {{
-                Errors.Add(failure.ErrorMessage);
-            }}
+            Errors = failures
+                .GroupBy(e => e.PropertyName, e => e.ErrorMessage)
+                .ToDictionary(failureGroup => failureGroup.Key, failureGroup => failureGroup.ToArray());
         }}
+
+        public IDictionary<string, string[]> Errors {{ get; }}
     }}
 }}";
         }

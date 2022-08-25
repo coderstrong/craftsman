@@ -6,9 +6,9 @@
 
     public class StartupModifier
     {
-        public static void RegisterMassTransitService(string solutionDirectory, string envName, string projectBaseName)
+        public static void RegisterMassTransitService(string srcDirectory, string envName, string projectBaseName)
         {
-            var classPath = Utilities.GetStartupClassPath(envName, solutionDirectory, projectBaseName);
+            var classPath = Utilities.GetStartupClassPath(srcDirectory, projectBaseName);
 
             if (!Directory.Exists(classPath.ClassDirectory))
                 throw new DirectoryNotFoundException($"The `{classPath.ClassDirectory}` directory could not be found.");
@@ -25,7 +25,7 @@
                 {
                     var newText = $"{line}";
                     if (line.Contains($"services.AddInfrastructure"))
-                        newText += @$"{Environment.NewLine}            services.AddMassTransitServices(_config);";
+                        newText += @$"{Environment.NewLine}        services.AddMassTransitServices(_config, _env);";
 
                     //if (line.Contains($@"{infraClassPath.ClassNamespace};"))
                     //    newText += @$"{ Environment.NewLine}    using { serviceRegistrationsClassPath.ClassNamespace}; ";

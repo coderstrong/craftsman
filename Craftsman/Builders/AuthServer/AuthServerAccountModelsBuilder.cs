@@ -23,37 +23,36 @@
 // See LICENSE in the project root for license information.
 
 
-namespace {classNamespace}
-{{  
-    using System;
-    using System.ComponentModel.DataAnnotations;
+namespace {classNamespace};  
 
-    public class AccountOptions
-    {{
-        public static bool AllowLocalLogin = true;
-        public static bool AllowRememberLogin = true;
-        public static TimeSpan RememberMeLoginDuration = TimeSpan.FromDays(30);
+using System;
+using System.ComponentModel.DataAnnotations;
 
-        public static bool ShowLogoutPrompt = true;
-        public static bool AutomaticRedirectAfterSignOut = false;
+public class AccountOptions
+{{
+    public static bool AllowLocalLogin = true;
+    public static bool AllowRememberLogin = true;
+    public static TimeSpan RememberMeLoginDuration = TimeSpan.FromDays(30);
 
-        public static string InvalidCredentialsErrorMessage = ""Invalid username or password"";
-    }}
+    public static bool ShowLogoutPrompt = true;
+    public static bool AutomaticRedirectAfterSignOut = false;
 
-    public class LoginInputModel
-    {{
-        [Required]
-        public string Username {{ get; set; }}
-        [Required]
-        public string Password {{ get; set; }}
-        public bool RememberLogin {{ get; set; }}
-        public string ReturnUrl {{ get; set; }}
-    }}
+    public static string InvalidCredentialsErrorMessage = ""Invalid username or password"";
+}}
 
-    public class LogoutInputModel
-    {{
-        public string LogoutId {{ get; set; }}
-    }}
+public class LoginInputModel
+{{
+    [Required]
+    public string Username {{ get; set; }}
+    [Required]
+    public string Password {{ get; set; }}
+    public bool RememberLogin {{ get; set; }}
+    public string ReturnUrl {{ get; set; }}
+}}
+
+public class LogoutInputModel
+{{
+    public string LogoutId {{ get; set; }}
 }}";
         }
     }

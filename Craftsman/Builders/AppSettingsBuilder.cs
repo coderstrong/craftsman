@@ -12,9 +12,9 @@
         /// <summary>
         /// this build will create environment based app settings files.
         /// </summary>
-        public static void CreateWebApiAppSettings(string solutionDirectory, ApiEnvironment env, string dbName, string projectBaseName)
+        public static void CreateWebApiAppSettings(string solutionDirectory, string dbName, string projectBaseName)
         {
-            var appSettingFilename = Utilities.GetAppSettingsName(env.EnvironmentName);
+            var appSettingFilename = Utilities.GetAppSettingsName();
             var classPath = ClassPathHelper.WebApiAppSettingsClassPath(solutionDirectory, $"{appSettingFilename}", projectBaseName);
 
             if (!Directory.Exists(classPath.ClassDirectory))
@@ -24,7 +24,7 @@
                 File.Delete(classPath.FullClassPath);
 
             using FileStream fs = File.Create(classPath.FullClassPath);
-            var data = GetAppSettingsText(env, dbName);
+            var data = GetAppSettingsText(dbName);
             fs.Write(Encoding.UTF8.GetBytes(data));
         }
 
@@ -38,36 +38,13 @@
             Utilities.CreateFile(classPath, fileText, fileSystem);
         }
 
-        private static string GetAppSettingsText(ApiEnvironment env, string dbName)
+        private static string GetAppSettingsText(string dbName)
         {
-            var jwtSettings = GetJwtAuthSettings(env);
-            var serilogSettings = GetSerilogSettings(env.EnvironmentName);
-            var bus = env.EnvironmentName == "FunctionalTesting" ? "true" : "false";
-
-            if (env.EnvironmentName == "Development" || env.EnvironmentName == "FunctionalTesting")
-
-                return @$"{{
+            // won't build properly if it has an empty string
+            return @$"{{
   ""AllowedHosts"": ""*"",
-  ""UseInMemoryBus"": {bus},
-  ""UseInMemoryDatabase"": true,
-{serilogSettings}{jwtSettings}
 }}
 ";
-            else
-            {
-                // won't build properly if it has an empty string
-                var connectionString = String.IsNullOrEmpty(env.ConnectionString) ? "local" : env.ConnectionString.Replace(@"\", @"\\");
-                return @$"{{
-  ""AllowedHosts"": ""*"",
-  ""UseInMemoryBus"": false,
-  ""UseInMemoryDatabase"": false,
-  ""ConnectionStrings"": {{
-    ""{dbName}"": ""{connectionString}""
-  }},
-{serilogSettings}{jwtSettings}
-}}
-";
-            }
         }
 
         private static string GetJwtAuthSettings(ApiEnvironment env)
@@ -79,33 +56,7 @@
     ""AuthorizationUrl"": ""{env.AuthorizationUrl}"",
     ""TokenUrl"": ""{env.TokenUrl}"",
     ""ClientId"": ""{env.ClientId}"",
-    ""ClientSecret"": ""{env.ClientSecret}""
-  }}";
-        }
-
-        private static string GetSerilogSettings(string envName)
-        {
-            var writeTo = envName == "Development" || envName == "FunctionalTesting" ? $@"
-      {{ ""Name"": ""Console"" }},
-      {{
-        ""Name"": ""Seq"",
-        ""Args"": {{
-          ""serverUrl"": ""http://localhost:5341""
-        }}
-      }}
-    " : "";
-
-            return $@"  ""Serilog"": {{
-    ""Using"": [],
-    ""MinimumLevel"": {{
-      ""Default"": ""Information"",
-      ""Override"": {{
-        ""Microsoft"": ""Warning"",
-        ""System"": ""Warning""
-      }}
-    }},
-    ""Enrich"": [ ""FromLogContext"", ""WithMachineName"", ""WithProcessId"", ""WithThreadId"" ],
-    ""WriteTo"": [{writeTo}]
+    ""ClientSecret"": ""{env.ClientSecret}"",
   }}";
         }
     }

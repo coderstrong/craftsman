@@ -1,5 +1,6 @@
 ﻿namespace Craftsman.Builders.Tests.FunctionalTests
 {
+    using System;
     using Craftsman.Exceptions;
     using Craftsman.Helpers;
     using Craftsman.Models;
@@ -7,70 +8,74 @@
     using System.IO;
     using System.IO.Abstractions;
     using System.Text;
+    using Enums;
 
     public class DeleteEntityTestBuilder
     {
-        public static void CreateTests(string solutionDirectory, Entity entity, List<Policy> policies, string projectBaseName, IFileSystem fileSystem)
+        public static void CreateTests(string solutionDirectory, string testDirectory, Entity entity, bool isProtected, string projectBaseName, IFileSystem fileSystem)
         {
-            var classPath = ClassPathHelper.FunctionalTestClassPath(solutionDirectory, $"Delete{entity.Name}Tests.cs", entity.Name, projectBaseName);
-            var fileText = WriteTestFileText(solutionDirectory, classPath, entity, policies, projectBaseName);
+            var classPath = ClassPathHelper.FunctionalTestClassPath(testDirectory, $"Delete{entity.Name}Tests.cs", entity.Name, projectBaseName);
+            var fileText = WriteTestFileText(solutionDirectory, testDirectory, classPath, entity, isProtected, projectBaseName);
             Utilities.CreateFile(classPath, fileText, fileSystem);
         }
 
-        private static string WriteTestFileText(string solutionDirectory, ClassPath classPath, Entity entity, List<Policy> policies, string projectBaseName)
+        private static string WriteTestFileText(string solutionDirectory, string testDirectory, ClassPath classPath, Entity entity, bool isProtected, string projectBaseName)
         {
-            var testUtilClassPath = ClassPathHelper.FunctionalTestUtilitiesClassPath(solutionDirectory, projectBaseName, "");
-            var fakerClassPath = ClassPathHelper.TestFakesClassPath(solutionDirectory, "", entity.Name, projectBaseName);
-
-            var hasRestrictedEndpoints = policies.Count > 0;
-            var authOnlyTests = hasRestrictedEndpoints ? $@"
+            var testUtilClassPath = ClassPathHelper.FunctionalTestUtilitiesClassPath(testDirectory, projectBaseName, "");
+            var fakerClassPath = ClassPathHelper.TestFakesClassPath(testDirectory, "", entity.Name, projectBaseName);
+            var permissionsClassPath = ClassPathHelper.PolicyDomainClassPath(testDirectory, "", projectBaseName);
+            var rolesClassPath = ClassPathHelper.SharedKernelDomainClassPath(solutionDirectory, "");
+            
+            var permissionsUsing = isProtected 
+                ? $"{Environment.NewLine}using {permissionsClassPath.ClassNamespace};{Environment.NewLine}using {rolesClassPath.ClassNamespace};"
+                : string.Empty;
+            
+            var authOnlyTests = isProtected ? $@"
             {DeleteEntityTestUnauthorized(entity)}
             {DeleteEntityTestForbidden(entity)}" : "";
 
-            return @$"namespace {classPath.ClassNamespace}
-{{
-    using {fakerClassPath.ClassNamespace};
-    using {testUtilClassPath.ClassNamespace};
-    using FluentAssertions;
-    using NUnit.Framework;
-    using System.Net.Http;
-    using System.Threading.Tasks;
+            return @$"namespace {classPath.ClassNamespace};
 
-    public class {Path.GetFileNameWithoutExtension(classPath.FullClassPath)} : TestBase
-    {{
-        {DeleteEntityTest(entity, hasRestrictedEndpoints, policies)}{authOnlyTests}
-    }}
+using {fakerClassPath.ClassNamespace};
+using {testUtilClassPath.ClassNamespace};{permissionsUsing}
+using FluentAssertions;
+using NUnit.Framework;
+using System.Net;
+using System.Threading.Tasks;
+
+public class {Path.GetFileNameWithoutExtension(classPath.FullClassPath)} : TestBase
+{{
+    {DeleteEntityTest(entity, isProtected)}{authOnlyTests}
 }}";
         }
 
-        private static string DeleteEntityTest(Entity entity, bool hasRestrictedEndpoints, List<Policy> policies)
+        private static string DeleteEntityTest(Entity entity, bool isProtected)
         {
             var fakeEntity = Utilities.FakerName(entity.Name);
             var fakeEntityVariableName = $"fake{entity.Name}";
             var pkName = Entity.PrimaryKeyProperty.Name;
+            var fakeCreationDto = Utilities.FakerName(Utilities.GetDtoName(entity.Name, Dto.Creation));
 
             var testName = $"delete_{entity.Name.ToLower()}_returns_nocontent_when_entity_exists";
-            testName += hasRestrictedEndpoints ? "_and_auth_credentials_are_valid" : "";
-            var scopes = Utilities.BuildTestAuthorizationString(policies, new List<Endpoint>() { Endpoint.DeleteRecord }, entity.Name, PolicyType.Scope);
-            var clientAuth = hasRestrictedEndpoints ? @$"
+            testName += isProtected ? "_and_auth_credentials_are_valid" : "";
+            var clientAuth = isProtected ? @$"
 
-            _client.AddAuth(new[] {scopes});
-            " : "";
+        _client.AddAuth(new[] {{Roles.SuperAdmin}});" : "";
 
             return $@"[Test]
-        public async Task {testName}()
-        {{
-            // Arrange
-            var {fakeEntityVariableName} = new {fakeEntity} {{ }}.Generate();{clientAuth}
-            await InsertAsync({fakeEntityVariableName});
+    public async Task {testName}()
+    {{
+        // Arrange
+        var {fakeEntityVariableName} = {fakeEntity}.Generate(new {fakeCreationDto}().Generate());{clientAuth}
+        await InsertAsync({fakeEntityVariableName});
 
-            // Act
-            var route = ApiRoutes.{entity.Plural}.Delete.Replace(ApiRoutes.{entity.Plural}.{pkName}, {fakeEntityVariableName}.{pkName}.ToString());
-            var result = await _client.DeleteRequestAsync(route);
+        // Act
+        var route = ApiRoutes.{entity.Plural}.Delete.Replace(ApiRoutes.{entity.Plural}.{pkName}, {fakeEntityVariableName}.{pkName}.ToString());
+        var result = await _client.DeleteRequestAsync(route);
 
-            // Assert
-            result.StatusCode.Should().Be(204);
-        }}";
+        // Assert
+        result.StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }}";
         }
 
         private static string DeleteEntityTestUnauthorized(Entity entity)
@@ -78,23 +83,24 @@
             var fakeEntity = Utilities.FakerName(entity.Name);
             var fakeEntityVariableName = $"fake{entity.Name}";
             var pkName = Entity.PrimaryKeyProperty.Name;
+            var fakeCreationDto = Utilities.FakerName(Utilities.GetDtoName(entity.Name, Dto.Creation));
 
             return $@"
-        [Test]
-        public async Task delete_{entity.Name.ToLower()}_returns_unauthorized_without_valid_token()
-        {{
-            // Arrange
-            var {fakeEntityVariableName} = new {fakeEntity} {{ }}.Generate();
+    [Test]
+    public async Task delete_{entity.Name.ToLower()}_returns_unauthorized_without_valid_token()
+    {{
+        // Arrange
+        var {fakeEntityVariableName} = {fakeEntity}.Generate(new {fakeCreationDto}().Generate());
 
-            await InsertAsync({fakeEntityVariableName});
+        await InsertAsync({fakeEntityVariableName});
 
-            // Act
-            var route = ApiRoutes.{entity.Plural}.Delete.Replace(ApiRoutes.{entity.Plural}.{pkName}, {fakeEntityVariableName}.{pkName}.ToString());
-            var result = await _client.DeleteRequestAsync(route);
+        // Act
+        var route = ApiRoutes.{entity.Plural}.Delete.Replace(ApiRoutes.{entity.Plural}.{pkName}, {fakeEntityVariableName}.{pkName}.ToString());
+        var result = await _client.DeleteRequestAsync(route);
 
-            // Assert
-            result.StatusCode.Should().Be(401);
-        }}";
+        // Assert
+        result.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }}";
         }
 
         private static string DeleteEntityTestForbidden(Entity entity)
@@ -102,24 +108,25 @@
             var fakeEntity = Utilities.FakerName(entity.Name);
             var fakeEntityVariableName = $"fake{entity.Name}";
             var pkName = Entity.PrimaryKeyProperty.Name;
+            var fakeCreationDto = Utilities.FakerName(Utilities.GetDtoName(entity.Name, Dto.Creation));
 
             return $@"
-        [Test]
-        public async Task delete_{entity.Name.ToLower()}_returns_forbidden_without_proper_scope()
-        {{
-            // Arrange
-            var {fakeEntityVariableName} = new {fakeEntity} {{ }}.Generate();
-            _client.AddAuth();
+    [Test]
+    public async Task delete_{entity.Name.ToLower()}_returns_forbidden_without_proper_scope()
+    {{
+        // Arrange
+        var {fakeEntityVariableName} = {fakeEntity}.Generate(new {fakeCreationDto}().Generate());
+        _client.AddAuth();
 
-            await InsertAsync({fakeEntityVariableName});
+        await InsertAsync({fakeEntityVariableName});
 
-            // Act
-            var route = ApiRoutes.{entity.Plural}.Delete.Replace(ApiRoutes.{entity.Plural}.{pkName}, {fakeEntityVariableName}.{pkName}.ToString());
-            var result = await _client.DeleteRequestAsync(route);
+        // Act
+        var route = ApiRoutes.{entity.Plural}.Delete.Replace(ApiRoutes.{entity.Plural}.{pkName}, {fakeEntityVariableName}.{pkName}.ToString());
+        var result = await _client.DeleteRequestAsync(route);
 
-            // Assert
-            result.StatusCode.Should().Be(403);
-        }}";
+        // Assert
+        result.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }}";
         }
     }
 }

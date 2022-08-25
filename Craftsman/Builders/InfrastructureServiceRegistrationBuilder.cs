@@ -26,25 +26,22 @@
         public static string GetServiceRegistrationText(string srcDirectory, string projectBaseName, string classNamespace)
         {
             var dbContextClassPath = ClassPathHelper.DbContextClassPath(srcDirectory, "", projectBaseName);
-            return @$"namespace {classNamespace}
+            var utilsClassPath = ClassPathHelper.WebApiResourcesClassPath(srcDirectory, "", projectBaseName);
+            return @$"namespace {classNamespace};
+
+using {dbContextClassPath.ClassNamespace};
+using {utilsClassPath.ClassNamespace};
+using Microsoft.EntityFrameworkCore;
+
+public static class ServiceRegistration
 {{
-    using {dbContextClassPath.ClassNamespace};
-    using Microsoft.AspNetCore.Hosting;
-    using Microsoft.EntityFrameworkCore;
-    using Microsoft.Extensions.Configuration;
-    using Microsoft.Extensions.DependencyInjection;
-
-    public static class ServiceRegistration
+    public static void AddInfrastructure(this IServiceCollection services, IConfiguration configuration, IWebHostEnvironment env)
     {{
-        public static void AddInfrastructure(this IServiceCollection services, IConfiguration configuration, IWebHostEnvironment env)
-        {{
-            // DbContext -- Do Not Delete
+        // DbContext -- Do Not Delete
 
-            // Auth -- Do Not Delete
-        }}
+        // Auth -- Do Not Delete
     }}
-}}
-";
+}}";
         }
     }
 }

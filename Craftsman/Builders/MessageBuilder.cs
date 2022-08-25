@@ -12,7 +12,7 @@
     {
         public static void CreateMessage(string solutionDirectory, Message message, IFileSystem fileSystem)
         {
-            var classPath = ClassPathHelper.MessagesProjectRootClassPath(solutionDirectory, $"{message.Name}.cs");
+            var classPath = ClassPathHelper.MessagesClassPath(solutionDirectory, $"{message.Name}.cs");
 
             if (!fileSystem.Directory.Exists(classPath.ClassDirectory))
                 fileSystem.Directory.CreateDirectory(classPath.ClassDirectory);
@@ -32,15 +32,14 @@
             return @$"namespace {classNamespace}
 {{
     using System;
-    using System.Collections.Generic;
     using System.Text;
 
     public interface {message.Name}
     {{
-{propString}
-
-        // add-on property marker - Do Not Delete This Comment
+        {propString}
     }}
+
+    // add-on property marker - Do Not Delete This Comment
 }}";
         }
 
@@ -50,7 +49,7 @@
             for (var eachProp = 0; eachProp < props.Count; eachProp++)
             {
                 string newLine = eachProp == props.Count - 1 ? "" : $"{Environment.NewLine}{Environment.NewLine}";
-                propString += $@"        {props[eachProp].Type} {props[eachProp].Name} {{ get; set; }}{newLine}";
+                propString += $@"    {props[eachProp].Type} {props[eachProp].Name} {{ get; set; }}{newLine}";
             }
 
             return propString;

@@ -23,23 +23,22 @@
 // See LICENSE in the project root for license information.
 
 
-namespace {classNamespace}
-{{  
-    using Duende.IdentityServer.Models;
+namespace {classNamespace};
 
-    public class ErrorViewModel
+using Duende.IdentityServer.Models;
+
+public class ErrorViewModel
+{{
+    public ErrorViewModel()
     {{
-        public ErrorViewModel()
-        {{
-        }}
-
-        public ErrorViewModel(string error)
-        {{
-            Error = new ErrorMessage {{ Error = error }};
-        }}
-
-        public ErrorMessage Error {{ get; set; }}
     }}
+
+    public ErrorViewModel(string error)
+    {{
+        Error = new ErrorMessage {{ Error = error }};
+    }}
+
+    public ErrorMessage Error {{ get; set; }}
 }}";
         }
     }

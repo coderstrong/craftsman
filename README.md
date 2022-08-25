@@ -5,7 +5,11 @@ Craftsman is the workhorse behind the [Wrapt](https://wrapt.dev) framework and p
 <p>
     <a href="https://github.com/pdevito3/craftsman/releases"><img src="https://img.shields.io/nuget/v/craftsman.svg" alt="Latest Release"></a>   
     <a href="https://github.com/pdevito3/craftsman/blob/master/LICENSE.txt"><img src ="https://img.shields.io/github/license/mashape/apistatus.svg?maxAge=2592000" alt="License"></a>
+  <a href="https://discord.gg/TBq2rVkSEj" target="\_parent">
+    <img alt="" src="https://img.shields.io/badge/Discord-Wrapt-%235865F2" />
+  </a>
 </p>
+
 
 ------
 
@@ -13,13 +17,49 @@ Craftsman is the workhorse behind the [Wrapt](https://wrapt.dev) framework and p
 
 For all the documentation on how to use Craftsman, visit [wrapt.dev](https://wrapt.dev).
 
-## Upcoming Features in v0.12
+## Upcoming Features in v0.13
 
-v0.11 had a lot of little cleanup items, but I want to bring in some of the big heavy hitting wins in v0.12. Below are some items I have on the docket for the upcoming release. I surely won't get to everything below and this could be reprioritized a bit over time, but want to make sure I let everyone know what's on the horizon! 
+v0.12 brought a ton of new features, but there are still several items I want to address before I slap the v1.0 sticker on things. I have some of the larger lifts below. Not everything here will be in the next release and this is certainly not an exhaustive list of everything, but I want to be open about what's on the horizon. 🌅
 
-Have a request for something you don't see below? Shoot me a message and let's talk about it!
+Have a request for something you don't see below? Join [our discord](https://discord.gg/TBq2rVkSEj) and let's talk about it!
 
-✅ docker utility updates for integration tests using [Fluent Docker](https://github.com/mariotoffia/FluentDocker) 🐳
+✅ DDD promoted entities (private setters, factory methods, associated fakers)
+
+✅ Huge permissions upgrade. Significantly simplified setup which resulted in a new library ([HeimGuard](https://github.com/pdevito3/heimguard)) that can be used in any .NET project.
+
+✅ Message bus scaffolding and testing improvements
+
+✅ New `register:producer` command
+
+✅ Added soft delete capability
+
+✅ Added Shared Kernel
+
+✅ Added `Complex` example for `new:example` command
+
+✅ Better M1 chip compatabilities (courtesy of @sshquack)
+
+🚧 Add Identity to Auth Server
+
+🚧 BFF Scaffolding
+
+🚧 React Scaffolding
+
+🚧 Json Schema for easier file scaffolding
+
+🚧 Performance Upgrades
+
+🚧 Logging Updates and OpenTelemetry additions 
+
+🚧 Supporting infrastructure scaffolding
+
+
+
+### Some of the v0.12 highlights
+
+✅ .NET 6 Scaffolding
+
+✅ Docker utility updates for integration tests using [Fluent Docker](https://github.com/mariotoffia/FluentDocker) 🐳
 
 ✅  `add:feature` enhancement to add more than just ad-hoc features
 
@@ -31,29 +71,19 @@ Have a request for something you don't see below? Shoot me a message and let's t
 
 ✅ Auth Server Scaffolding (In-Memory)
 
-🚧 Better environment variable support
+✅ First class environment variable usage
 
-🚧 Add Identity to Auth Server
+✅ Auditable entities
 
-🚧 Auditable Entities
+✅ Current user service
 
-🚧 Current user service
+✅ Refactor error handling pipeline
 
-🚧 BFF Scaffolding
+✅ Startup Consolidation
 
-🚧 React Scaffolding
+✅ More test scaffolding
 
-🚧 Json Schema for easier file scaffolding
-
-🚧 More scaffolded test coverage
-
-🚧 Refactor error handling pipeline
-
-🚧 Performance Upgrades
-
-🚧 Pub/Sub Tests
-
-🚧 Logging Updates and OpenTelemetry additions 
+✅ Db naming conventions
 
 ## Support
 
@@ -65,4 +95,4 @@ Time is of the essence. Before developing a Pull Request I recommend opening a n
 
 ## Contact Me
 
-Sometimes Github notifications get lost in the shuffle. If you file an issue and don't hear from me in 24-48 hours feel free to ping me on [twitter](https://twitter.com/pdevito3) or Discord (pdevito3#4244).
+Sometimes Github notifications get lost in the shuffle. If you file an issue and don't hear from me in 24-48 hours feel free to ping me on [twitter](https://twitter.com/pdevito3) or Discord (pdevito3#4244). We also have [own discord channel](https://discord.gg/TBq2rVkSEj) now for easy contact with me and larger community discussions!

@@ -8,60 +8,144 @@
     using System.Collections.Generic;
     using System.Diagnostics;
     using System.IO;
+    using System.IO.Abstractions;
     using System.Linq;
     using System.Text;
 
     public class DbContextBuilder
     {
-        public static void CreateDbContext(string srcDirectory, List<Entity> entities, string dbContextName, string dbProvider, string dbName, string projectBaseName)
+        public static void CreateDbContext(string srcDirectory,
+            List<Entity> entities,
+            string dbContextName,
+            string dbProvider,
+            string dbName,
+            NamingConventionEnum namingConventionEnum,
+            bool useSoftDelete,
+            string projectBaseName,
+            IFileSystem fileSystem
+        )
         {
             var classPath = ClassPathHelper.DbContextClassPath(srcDirectory, $"{dbContextName}.cs", projectBaseName);
-
-            if (!Directory.Exists(classPath.ClassDirectory))
-                Directory.CreateDirectory(classPath.ClassDirectory);
-
-            if (File.Exists(classPath.FullClassPath))
-                throw new FileAlreadyExistsException(classPath.FullClassPath);
-
-            using (FileStream fs = File.Create(classPath.FullClassPath))
-            {
-                var data = GetContextFileText(classPath.ClassNamespace, entities, dbContextName, srcDirectory, projectBaseName);
-                fs.Write(Encoding.UTF8.GetBytes(data));
-            }
-
-            RegisterContext(srcDirectory, dbProvider, dbContextName, dbName, projectBaseName);
+            var data = GetContextFileText(classPath.ClassNamespace, entities, dbContextName, srcDirectory, useSoftDelete, projectBaseName);
+            Utilities.CreateFile(classPath, data, fileSystem);
+            
+            RegisterContext(srcDirectory, dbProvider, dbContextName, dbName, namingConventionEnum, projectBaseName);
         }
 
-        public static string GetContextFileText(string classNamespace, List<Entity> entities, string dbContextName, string solutionDirectory, string projectBaseName)
+        public static string GetContextFileText(string classNamespace, List<Entity> entities, string dbContextName, string srcDirectory, bool useSoftDelete, string projectBaseName)
         {
             var entitiesUsings = "";
             foreach (var entity in entities)
             {
-                var classPath = ClassPathHelper.EntityClassPath(solutionDirectory, "", entity.Plural, projectBaseName);
-                entitiesUsings += $"{Environment.NewLine}    using {classPath.ClassNamespace};";
+                var classPath = ClassPathHelper.EntityClassPath(srcDirectory, "", entity.Plural, projectBaseName);
+                entitiesUsings += $"{Environment.NewLine}using {classPath.ClassNamespace};";
             }
+            var servicesClassPath = ClassPathHelper.WebApiServicesClassPath(srcDirectory, "", projectBaseName);
+            var baseEntityClassPath = ClassPathHelper.EntityClassPath(srcDirectory, $"", "", projectBaseName);
+
+            var softDelete = useSoftDelete 
+                ? $@"
+                    entry.State = EntityState.Modified;
+                    entry.Entity.UpdateModifiedProperties(now, _currentUserService?.UserId);
+                    entry.Entity.UpdateIsDeleted(true);"
+                : "";            
+            var softDeleteFilterClass = useSoftDelete 
+                ? $@"
+
+{SoftDeleteFilterClass()}"
+                :"";
             
-            return @$"namespace {classNamespace}
-{{{entitiesUsings}
-    using Microsoft.EntityFrameworkCore;
-    using Microsoft.EntityFrameworkCore.ChangeTracking;
-    using System.Threading;
-    using System.Threading.Tasks;
+            var modelBuilderFilter = useSoftDelete 
+                ? $@"
+            modelBuilder.FilterSoftDeletedRecords();"
+                : "";
+            
+            return @$"namespace {classNamespace};
 
-    public class {dbContextName} : DbContext
+{entitiesUsings}
+using {baseEntityClassPath.ClassNamespace};
+using {servicesClassPath.ClassNamespace};
+using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.ChangeTracking;
+using System.Linq.Expressions;
+using System.Threading;
+using System.Threading.Tasks;
+using Microsoft.EntityFrameworkCore.Query;
+
+public class {dbContextName} : DbContext
+{{
+    private readonly ICurrentUserService _currentUserService;
+
+    public {dbContextName}(
+        DbContextOptions<{dbContextName}> options, ICurrentUserService currentUserService) : base(options)
     {{
-        public {dbContextName}(
-            DbContextOptions<{dbContextName}> options) : base(options)
-        {{
-        }}
+        _currentUserService = currentUserService;
+    }}
 
-        #region DbSet Region - Do Not Delete
+    #region DbSet Region - Do Not Delete
 
 {GetDbSetText(entities)}
-        #endregion DbSet Region - Do Not Delete
+    #endregion DbSet Region - Do Not Delete
 
-        protected override void OnModelCreating(ModelBuilder modelBuilder)
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {{
+        base.OnModelCreating(modelBuilder);{modelBuilderFilter}
+    }}
+
+    public override Task<int> SaveChangesAsync(CancellationToken cancellationToken = new())
+    {{
+        UpdateAuditFields();
+        return base.SaveChangesAsync(cancellationToken);
+    }}
+
+    public override int SaveChanges()
+    {{
+        UpdateAuditFields();
+        return base.SaveChanges();
+    }}
+        
+    private void UpdateAuditFields()
+    {{
+        var now = DateTime.UtcNow;
+        foreach (var entry in ChangeTracker.Entries<BaseEntity>())
         {{
+            switch (entry.State)
+            {{
+                case EntityState.Added:
+                    entry.Entity.UpdateCreationProperties(now, _currentUserService?.UserId);
+                    entry.Entity.UpdateModifiedProperties(now, _currentUserService?.UserId);
+                    break;
+
+                case EntityState.Modified:
+                    entry.Entity.UpdateModifiedProperties(now, _currentUserService?.UserId);
+                    break;
+                
+                case EntityState.Deleted:{softDelete}
+                    break;
+            }}
+        }}
+    }}
+}}{softDeleteFilterClass}";
+        }
+
+        private static string SoftDeleteFilterClass()
+        {
+            return $@"public static class Extensions
+{{
+    public static void FilterSoftDeletedRecords(this ModelBuilder modelBuilder)
+    {{
+        Expression<Func<BaseEntity, bool>> filterExpr = e => !e.IsDeleted;
+        foreach (var mutableEntityType in modelBuilder.Model.GetEntityTypes()
+            .Where(m => m.ClrType.IsAssignableTo(typeof(BaseEntity))))
+        {{
+            // modify expression to handle correct child type
+            var parameter = Expression.Parameter(mutableEntityType.ClrType);
+            var body = ReplacingExpressionVisitor
+                .Replace(filterExpr.Parameters.First(), parameter, filterExpr.Body);
+            var lambdaExpression = Expression.Lambda(body, parameter);
+
+            // set filter
+            mutableEntityType.SetQueryFilter(lambdaExpression);
         }}
     }}
 }}";
@@ -74,13 +158,13 @@
             foreach (var entity in entities)
             {
                 var newLine = entity == entities.LastOrDefault() ? "" : $"{Environment.NewLine}";
-                dbSetText += @$"        public DbSet<{entity.Name}> {entity.Plural} {{ get; set; }}{newLine}";
+                dbSetText += @$"    public DbSet<{entity.Name}> {entity.Plural} {{ get; set; }}{newLine}";
             }
 
             return dbSetText;
         }
 
-        private static void RegisterContext(string srcDirectory, string dbProvider, string dbContextName, string dbName, string projectBaseName)
+        private static void RegisterContext(string srcDirectory, string dbProvider, string dbContextName, string dbName, NamingConventionEnum namingConventionEnum, string projectBaseName)
         {
             var classPath = ClassPathHelper.WebApiServiceExtensionsClassPath(srcDirectory, $"{Utilities.GetInfraRegistrationName()}.cs", projectBaseName);
 
@@ -93,6 +177,12 @@
             var usingDbStatement = GetDbUsingStatement(dbProvider);
             InstallDbProviderNugetPackages(dbProvider, srcDirectory);
 
+            //TODO test for class and another for anything else
+            var namingConvention = namingConventionEnum == NamingConventionEnum.Class
+                ? ""
+                : @$"
+                            .{namingConventionEnum.ExtensionMethod()}()";
+            
             var tempPath = $"{classPath.FullClassPath}temp";
             using (var input = File.OpenText(classPath.FullClassPath))
             {
@@ -105,18 +195,18 @@
                         if (line.Contains("// DbContext -- Do Not Delete")) // abstract this to a constants file?
                         {
                             newText += @$"
-            if (configuration.GetValue<bool>(""UseInMemoryDatabase""))
-            {{
-                services.AddDbContext<{dbContextName}>(options =>
-                    options.UseInMemoryDatabase($""{dbName ?? dbContextName}""));
-            }}
-            else
-            {{
-                services.AddDbContext<{dbContextName}>(options =>
-                    options.{usingDbStatement}(
-                        configuration.GetConnectionString(""{dbName}""),
-                        builder => builder.MigrationsAssembly(typeof({dbContextName}).Assembly.FullName)));
-            }}";
+        if (env.IsEnvironment(LocalConfig.FunctionalTestingEnvName) || env.IsDevelopment())
+        {{
+            services.AddDbContext<{dbContextName}>(options =>
+                options.UseInMemoryDatabase($""{dbName ?? dbContextName}""));
+        }}
+        else
+        {{
+            services.AddDbContext<{dbContextName}>(options =>
+                options.{usingDbStatement}(
+                    Environment.GetEnvironmentVariable(""DB_CONNECTION_STRING"") ?? ""placeholder-for-migrations"",
+                    builder => builder.MigrationsAssembly(typeof({dbContextName}).Assembly.FullName)){namingConvention});
+        }}";
                         }
 
                         output.WriteLine(newText);
@@ -129,7 +219,7 @@
             File.Move(tempPath, classPath.FullClassPath);
         }
 
-        private static void InstallDbProviderNugetPackages(string provider, string solutionDirectory)
+        private static void InstallDbProviderNugetPackages(string provider, string srcDirectory)
         {
             var installCommand = $"add Infrastructure.Persistence{Path.DirectorySeparatorChar}Infrastructure.Persistence.csproj package Microsoft.EntityFrameworkCore.SqlServer --version 5.0.0";
 
@@ -148,7 +238,7 @@
                     RedirectStandardError = true,
                     UseShellExecute = false,
                     CreateNoWindow = false,
-                    WorkingDirectory = solutionDirectory
+                    WorkingDirectory = srcDirectory
                 }
             };
 
@@ -164,99 +254,6 @@
             //    return "UseMySql";
 
             return "UseSqlServer";
-        }
-
-        public static string GetAuditableSaveOverride(string classNamespace, List<Entity> entities, string dbContextName, string solutionDirectory, string projectBaseName)
-        {
-            var entitiesUsings = "";
-            foreach (var entity in entities)
-            {
-                var classPath = ClassPathHelper.EntityClassPath(solutionDirectory, "", entity.Plural, projectBaseName);
-                entitiesUsings += $"{Environment.NewLine}    using {classPath.ClassNamespace};";
-            }
-            // notice domain.common that would need to be added and looked up. possibly interfaces too
-            return @$"namespace {classNamespace}
-{{{entitiesUsings};
-    using Microsoft.EntityFrameworkCore;
-    using Microsoft.EntityFrameworkCore.ChangeTracking;
-    using System.Threading;
-    using System.Threading.Tasks;
-    using Domain.Common;
-    using System.Reflection;
-
-    public class {dbContextName} : DbContext
-    {{
-        private readonly IDateTimeService _dateTimeService;
-        private readonly ICurrentUserService _currentUserService;
-
-        public {dbContextName}(
-            DbContextOptions<{dbContextName}> options,
-            ICurrentUserService currentUserService,
-            IDateTimeService dateTimeService) : base(options)
-        {{
-            _currentUserService = currentUserService;
-            _dateTimeService = dateTimeService;
-        }}
-
-        #region DbSet Region - Do Not Delete
-
-{GetDbSetText(entities)}
-        #endregion DbSet Region - Do Not Delete
-
-        public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = new CancellationToken())
-        {{
-            foreach (EntityEntry<AuditableEntity> entry in ChangeTracker.Entries<AuditableEntity>())
-            {{
-                switch (entry.State)
-                {{
-                    case EntityState.Added:
-                        entry.Entity.CreatedBy = _currentUserService.UserId;
-                        entry.Entity.CreatedOn = _dateTimeService.NowUtc;
-                        break;
-
-                    case EntityState.Modified:
-                        entry.Entity.LastModifiedBy = _currentUserService.UserId;
-                        entry.Entity.LastModifiedOn = _dateTimeService.NowUtc;
-                        break;
-                }}
-            }}
-
-            int result = await base.SaveChangesAsync(cancellationToken);
-
-            return result;
-        }}
-
-        public override int SaveChanges()
-        {{
-            foreach (EntityEntry<AuditableEntity> entry in ChangeTracker.Entries<AuditableEntity>())
-            {{
-                switch (entry.State)
-                {{
-                    case EntityState.Added:
-                        entry.Entity.CreatedBy = _currentUserService.UserId;
-                        entry.Entity.CreatedOn = _dateTimeService.NowUtc;
-                        break;
-
-                    case EntityState.Modified:
-                        entry.Entity.LastModifiedBy = _currentUserService.UserId;
-                        entry.Entity.LastModifiedOn = _dateTimeService.NowUtc;
-                        break;
-                }}
-            }}
-
-            int result = base.SaveChanges();
-
-            return result;
-        }}
-
-        protected override void OnModelCreating(ModelBuilder builder)
-        {{
-            builder.ApplyConfigurationsFromAssembly(Assembly.GetExecutingAssembly());
-
-            base.OnModelCreating(builder);
-        }}
-    }}
-}}";
         }
     }
 }

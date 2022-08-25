@@ -1,5 +1,6 @@
 ﻿namespace Craftsman.Builders.Tests.FunctionalTests
 {
+    using System;
     using Craftsman.Enums;
     using Craftsman.Exceptions;
     using Craftsman.Helpers;
@@ -11,131 +12,131 @@
 
     public class AddListTestBuilder
     {
-        public static void CreateTests(string solutionDirectory, Entity entity, List<Policy> policies, Feature feature, string projectBaseName, IFileSystem fileSystem)
+        public static void CreateTests(string solutionDirectory, string testDirectory, Entity entity, Feature feature, string projectBaseName, IFileSystem fileSystem)
         {
-            var classPath = ClassPathHelper.FunctionalTestClassPath(solutionDirectory, $"{feature.Name}Tests.cs", entity.Name, projectBaseName);
-            var fileText = WriteTestFileText(solutionDirectory, classPath, entity, policies, feature, projectBaseName);
+            var classPath = ClassPathHelper.FunctionalTestClassPath(testDirectory, $"{feature.Name}Tests.cs", entity.Name, projectBaseName);
+            var fileText = WriteTestFileText(solutionDirectory, testDirectory, classPath, entity, feature.IsProtected, feature, projectBaseName);
             Utilities.CreateFile(classPath, fileText, fileSystem);
         }
 
-        private static string WriteTestFileText(string solutionDirectory, ClassPath classPath, Entity entity, List<Policy> policies, Feature feature, string projectBaseName)
+        private static string WriteTestFileText(string solutionDirectory, string srcDirectory, ClassPath classPath, Entity entity, bool isProtected, Feature feature, string projectBaseName)
         {
             var dtoUtilClassPath = ClassPathHelper.DtoClassPath(solutionDirectory, "", entity.Name, projectBaseName);
-            var testUtilClassPath = ClassPathHelper.FunctionalTestUtilitiesClassPath(solutionDirectory, projectBaseName, "");
-            var fakerClassPath = ClassPathHelper.TestFakesClassPath(solutionDirectory, "", entity.Name, projectBaseName);
-            var parentFakerClassPath = ClassPathHelper.TestFakesClassPath(solutionDirectory, "", feature.ParentEntity, projectBaseName);
+            var testUtilClassPath = ClassPathHelper.FunctionalTestUtilitiesClassPath(srcDirectory, projectBaseName, "");
+            var fakerClassPath = ClassPathHelper.TestFakesClassPath(srcDirectory, "", entity.Name, projectBaseName);
+            var parentFakerClassPath = ClassPathHelper.TestFakesClassPath(srcDirectory, "", feature.ParentEntity, projectBaseName);
+            var permissionsClassPath = ClassPathHelper.PolicyDomainClassPath(srcDirectory, "", projectBaseName);
+            var rolesClassPath = ClassPathHelper.SharedKernelDomainClassPath(solutionDirectory, "");
+            
+            var permissionsUsing = isProtected 
+                ? $"{Environment.NewLine}using {permissionsClassPath.ClassNamespace};{Environment.NewLine}using {rolesClassPath.ClassNamespace};"
+                : string.Empty;
 
-            var hasRestrictedEndpoints = policies.Count > 0;
-            var authOnlyTests = hasRestrictedEndpoints ? $@"
+            var authOnlyTests = isProtected ? $@"
             {CreateEntityTestUnauthorized(entity)}
             {CreateEntityTestForbidden(entity)}" : "";
 
-            return @$"namespace {classPath.ClassNamespace}
-{{
-    using {dtoUtilClassPath.ClassNamespace};
-    using {fakerClassPath.ClassNamespace};
-    using {parentFakerClassPath.ClassNamespace};
-    using {testUtilClassPath.ClassNamespace};
-    using FluentAssertions;
-    using NUnit.Framework;
-    using System;
-    using System.Net.Http;
-    using System.Threading.Tasks;
-    using System.Collections.Generic;
+            return @$"namespace {classPath.ClassNamespace};
 
-    public class {Path.GetFileNameWithoutExtension(classPath.FullClassPath)} : TestBase
-    {{
-        {CreateEntityTest(entity, feature, hasRestrictedEndpoints, policies)}
-        {NotFoundCreationTest(entity, feature, hasRestrictedEndpoints, policies)}
-        {InvalidCreationTest(entity, feature, hasRestrictedEndpoints, policies)}{authOnlyTests}
-    }}
+using {dtoUtilClassPath.ClassNamespace};
+using {fakerClassPath.ClassNamespace};
+using {parentFakerClassPath.ClassNamespace};
+using {testUtilClassPath.ClassNamespace};{permissionsUsing}
+using FluentAssertions;
+using NUnit.Framework;
+using System.Net;
+using System.Threading.Tasks;
+
+public class {Path.GetFileNameWithoutExtension(classPath.FullClassPath)} : TestBase
+{{
+    {CreateEntityTest(entity, feature, isProtected)}
+    {NotFoundCreationTest(entity, feature, isProtected)}
+    {InvalidCreationTest(entity, feature, isProtected)}{authOnlyTests}
 }}";
         }
 
-        private static string CreateEntityTest(Entity entity, Feature feature, bool hasRestrictedEndpoints, List<Policy> policies)
+        private static string CreateEntityTest(Entity entity, Feature feature, bool isProtected)
         {
             var createDto = Utilities.GetDtoName(entity.Name, Dto.Creation);
             var fakeEntityForCreation = $"Fake{createDto}";
             var fakeEntityVariableName = $"fake{entity.Name}List";
             var fakeParentEntity = $"fake{feature.ParentEntity}";
+            var fakeParentCreationDto = Utilities.FakerName(Utilities.GetDtoName(feature.ParentEntity, Dto.Creation));
 
             var testName = $"create_{entity.Name.ToLower()}_list_returns_created_using_valid_dto";
-            testName += hasRestrictedEndpoints ? "_and_valid_auth_credentials" : "";
-            var scopes = Utilities.BuildTestAuthorizationString(policies, new List<Endpoint>() { Endpoint.AddRecord }, entity.Name, PolicyType.Scope);
-            var clientAuth = hasRestrictedEndpoints ? @$"
+            testName += isProtected ? "_and_valid_auth_credentials" : "";
+            var clientAuth = isProtected ? @$"
 
-            _client.AddAuth(new[] {scopes});" : "";
+        _client.AddAuth(new[] {{Roles.SuperAdmin}});" : "";
 
             return $@"[Test]
-        public async Task {testName}()
-        {{
-            // Arrange
-            var {fakeParentEntity} = new Fake{feature.ParentEntity}() {{ }}.Generate();
-            await InsertAsync({fakeParentEntity});
-            var {fakeEntityVariableName} = new List<{createDto}> {{new {fakeEntityForCreation} {{ }}.Generate()}};{clientAuth}
+    public async Task {testName}()
+    {{
+        // Arrange
+        var {fakeParentEntity} = Fake{feature.ParentEntity}.Generate(new {fakeParentCreationDto}().Generate());
+        await InsertAsync({fakeParentEntity});
+        var {fakeEntityVariableName} = new List<{createDto}> {{new {fakeEntityForCreation} {{ }}.Generate()}};{clientAuth}
 
-            // Act
-            var route = ApiRoutes.{entity.Plural}.Create;
-            var result = await _client.PostJsonRequestAsync($""{{route}}?{feature.ParentEntity.LowercaseFirstLetter()}={{{fakeParentEntity}.Id}}"", {fakeEntityVariableName});
+        // Act
+        var route = ApiRoutes.{entity.Plural}.CreateBatch;
+        var result = await _client.PostJsonRequestAsync($""{{route}}?{feature.BatchPropertyName.ToLower()}={{{fakeParentEntity}.Id}}"", {fakeEntityVariableName});
 
-            // Assert
-            result.StatusCode.Should().Be(201);
-        }}";
+        // Assert
+        result.StatusCode.Should().Be(HttpStatusCode.Created);
+    }}";
         }
 
-        private static string NotFoundCreationTest(Entity entity, Feature feature, bool hasRestrictedEndpoints, List<Policy> policies)
+        private static string NotFoundCreationTest(Entity entity, Feature feature, bool isProtected)
         {
             var createDto = Utilities.GetDtoName(entity.Name, Dto.Creation);
             var fakeEntityForCreation = $"Fake{createDto}";
             var fakeEntityVariableName = $"fake{entity.Name}List";
 
             var testName = $"create_{entity.Name.ToLower()}_list_returns_notfound_when_fk_doesnt_exist";
-            testName += hasRestrictedEndpoints ? "_and_valid_auth_credentials" : "";
-            var scopes = Utilities.BuildTestAuthorizationString(policies, new List<Endpoint>() { Endpoint.AddRecord }, entity.Name, PolicyType.Scope);
-            var clientAuth = hasRestrictedEndpoints ? @$"
+            testName += isProtected ? "_and_valid_auth_credentials" : "";
+            var clientAuth = isProtected ? @$"
 
-            _client.AddAuth(new[] {scopes});" : "";
+        _client.AddAuth(new[] {{Roles.SuperAdmin}});" : "";
 
             return $@"[Test]
-        public async Task {testName}()
-        {{
-            // Arrange
-            var {fakeEntityVariableName} = new List<{createDto}> {{new {fakeEntityForCreation} {{ }}.Generate()}};{clientAuth}
+    public async Task {testName}()
+    {{
+        // Arrange
+        var {fakeEntityVariableName} = new List<{createDto}> {{new {fakeEntityForCreation} {{ }}.Generate()}};{clientAuth}
 
-            // Act
-            var route = ApiRoutes.{entity.Plural}.Create;
-            var result = await _client.PostJsonRequestAsync($""{{route}}?{feature.ParentEntity.LowercaseFirstLetter()}={{Guid.NewGuid()}}"", {fakeEntityVariableName});
+        // Act
+        var route = ApiRoutes.{entity.Plural}.CreateBatch;
+        var result = await _client.PostJsonRequestAsync($""{{route}}?{feature.BatchPropertyName.ToLower()}={{Guid.NewGuid()}}"", {fakeEntityVariableName});
 
-            // Assert
-            result.StatusCode.Should().Be(404);
-        }}";
+        // Assert
+        result.StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }}";
         }
 
-        private static string InvalidCreationTest(Entity entity, Feature feature, bool hasRestrictedEndpoints, List<Policy> policies)
+        private static string InvalidCreationTest(Entity entity, Feature feature, bool isProtected)
         {
             var createDto = Utilities.GetDtoName(entity.Name, Dto.Creation);
             var fakeEntityForCreation = $"Fake{createDto}";
             var fakeEntityVariableName = $"fake{entity.Name}List";
 
             var testName = $"create_{entity.Name.ToLower()}_list_returns_badrequest_when_no_fk_param";
-            testName += hasRestrictedEndpoints ? "_and_valid_auth_credentials" : "";
-            var scopes = Utilities.BuildTestAuthorizationString(policies, new List<Endpoint>() { Endpoint.AddRecord }, entity.Name, PolicyType.Scope);
-            var clientAuth = hasRestrictedEndpoints ? @$"
+            testName += isProtected ? "_and_valid_auth_credentials" : "";
+            var clientAuth = isProtected ? @$"
 
-            _client.AddAuth(new[] {scopes});" : "";
+        _client.AddAuth(new[] {{Roles.SuperAdmin}});" : "";
 
             return $@"[Test]
-        public async Task {testName}()
-        {{
-            // Arrange
-            var {fakeEntityVariableName} = new List<{createDto}> {{new {fakeEntityForCreation} {{ }}.Generate()}};{clientAuth}
+    public async Task {testName}()
+    {{
+        // Arrange
+        var {fakeEntityVariableName} = new List<{createDto}> {{new {fakeEntityForCreation} {{ }}.Generate()}};{clientAuth}
 
-            // Act
-            var result = await _client.PostJsonRequestAsync(ApiRoutes.{entity.Plural}.Create, {fakeEntityVariableName});
+        // Act
+        var result = await _client.PostJsonRequestAsync(ApiRoutes.{entity.Plural}.CreateBatch, {fakeEntityVariableName});
 
-            // Assert
-            result.StatusCode.Should().Be(400);
-        }}";
+        // Assert
+        result.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }}";
         }
 
         private static string CreateEntityTestUnauthorized(Entity entity)
@@ -144,21 +145,21 @@
             var fakeEntityVariableName = $"fake{entity.Name}";
 
             return $@"
-        [Test]
-        public async Task create_{entity.Name.ToLower()}_list_returns_unauthorized_without_valid_token()
-        {{
-            // Arrange
-            var {fakeEntityVariableName} = new {fakeEntity} {{ }}.Generate();
+    [Test]
+    public async Task create_{entity.Name.ToLower()}_list_returns_unauthorized_without_valid_token()
+    {{
+        // Arrange
+        var {fakeEntityVariableName} = new {fakeEntity} {{ }}.Generate();
 
-            await InsertAsync({fakeEntityVariableName});
+        await InsertAsync({fakeEntityVariableName});
 
-            // Act
-            var route = ApiRoutes.{entity.Plural}.Create;
-            var result = await _client.PostJsonRequestAsync(route, {fakeEntityVariableName});
+        // Act
+        var route = ApiRoutes.{entity.Plural}.CreateBatch;
+        var result = await _client.PostJsonRequestAsync(route, {fakeEntityVariableName});
 
-            // Assert
-            result.StatusCode.Should().Be(401);
-        }}";
+        // Assert
+        result.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }}";
         }
 
         private static string CreateEntityTestForbidden(Entity entity)
@@ -167,22 +168,22 @@
             var fakeEntityVariableName = $"fake{entity.Name}";
 
             return $@"
-        [Test]
-        public async Task create_{entity.Name.ToLower()}_list_returns_forbidden_without_proper_scope()
-        {{
-            // Arrange
-            var {fakeEntityVariableName} = new {fakeEntity} {{ }}.Generate();
-            _client.AddAuth();
+    [Test]
+    public async Task create_{entity.Name.ToLower()}_list_returns_forbidden_without_proper_scope()
+    {{
+        // Arrange
+        var {fakeEntityVariableName} = new {fakeEntity} {{ }}.Generate();
+        _client.AddAuth();
 
-            await InsertAsync({fakeEntityVariableName});
+        await InsertAsync({fakeEntityVariableName});
 
-            // Act
-            var route = ApiRoutes.{entity.Plural}.Create;
-            var result = await _client.PostJsonRequestAsync(route, {fakeEntityVariableName});
+        // Act
+        var route = ApiRoutes.{entity.Plural}.CreateBatch;
+        var result = await _client.PostJsonRequestAsync(route, {fakeEntityVariableName});
 
-            // Assert
-            result.StatusCode.Should().Be(403);
-        }}";
+        // Assert
+        result.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }}";
         }
     }
 }

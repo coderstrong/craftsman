@@ -20,35 +20,34 @@
         {
             var testUtilClassPath = ClassPathHelper.FunctionalTestUtilitiesClassPath(solutionDirectory, projectBaseName, "");
 
-            return @$"namespace {classPath.ClassNamespace}
-{{
-    using {testUtilClassPath.ClassNamespace};
-    using FluentAssertions;
-    using NUnit.Framework;
-    using System.Net.Http;
-    using System.Threading.Tasks;
+            return @$"namespace {classPath.ClassNamespace};
 
-    public class {Path.GetFileNameWithoutExtension(classPath.FullClassPath)} : TestBase
-    {{
-        {HealthTest()}
-    }}
+using {testUtilClassPath.ClassNamespace};
+using FluentAssertions;
+using NUnit.Framework;
+using System.Net;
+using System.Threading.Tasks;
+
+public class {Path.GetFileNameWithoutExtension(classPath.FullClassPath)} : TestBase
+{{
+    {HealthTest()}
 }}";
         }
 
         private static string HealthTest()
         {
             return $@"[Test]
-        public async Task health_check_returns_ok()
-        {{
-            // Arrange
-            // N/A
+    public async Task health_check_returns_ok()
+    {{
+        // Arrange
+        // N/A
 
-            // Act
-            var result = await _client.GetRequestAsync(ApiRoutes.Health);
+        // Act
+        var result = await _client.GetRequestAsync(ApiRoutes.Health);
 
-            // Assert
-            result.StatusCode.Should().Be(200);
-        }}";
+        // Assert
+        result.StatusCode.Should().Be(HttpStatusCode.OK);
+    }}";
         }
     }
 }

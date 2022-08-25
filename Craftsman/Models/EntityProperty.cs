@@ -58,7 +58,52 @@ namespace Craftsman.Models
         /// <summary>
         /// Designates the property as a foreign key for the entity
         /// </summary>
-        public bool IsForeignKey => !string.IsNullOrEmpty(ForeignEntityName);
+        public bool IsForeignKey
+        {
+            get => !string.IsNullOrEmpty(ForeignEntityName)
+                   || IsMany;
+        }
+
+        public bool IsPrimativeType
+        {
+            get 
+            {
+                var rawType = Type.ToLower().Trim().Replace("?", "");
+                return rawType is "string" 
+                    or "byte"
+                    or "sbyte"
+                    or "short"
+                    or "ushort"
+                    or "int" 
+                    or "nint" 
+                    or "uint" 
+                    or "nuint" 
+                    or "long" 
+                    or "ulong" 
+                    or "double"
+                    or "float" 
+                    or "decimal" 
+                    or "char" 
+                    or "bool" 
+                    or "dateonly"
+                    or "timeonly" 
+                    or "datetime" 
+                    or "object" 
+                    or "guid";
+            }
+        }
+
+        public bool IsMany
+        {
+            get => Type.StartsWith("Collection<")
+                   || Type.StartsWith("ICollection<")
+                   || Type.StartsWith("IEnumerable<")
+                   || Type.StartsWith("Enumerable<")
+                   || Type.StartsWith("Hashset<")
+                   || Type.StartsWith("Dictionary<")
+                   || Type.StartsWith("IDictionary<")
+                   || Type.StartsWith("List<");
+        }
 
         /// <summary>
         /// Captures the name of the entity this property is linked to as a foreign key.

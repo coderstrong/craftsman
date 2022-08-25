@@ -9,7 +9,7 @@
 
     public class CommandUpdateRecordBuilder
     {
-        public static void CreateCommand(string srcDirectory, Entity entity, string contextName, string projectBaseName)
+        public static void CreateCommand(string solutionDirectory, string srcDirectory, Entity entity, string contextName, string projectBaseName)
         {
             var classPath = ClassPathHelper.FeaturesClassPath(srcDirectory, $"{Utilities.UpdateEntityFeatureClassName(entity.Name)}.cs", entity.Plural, projectBaseName);
 
@@ -22,17 +22,16 @@
             using (FileStream fs = File.Create(classPath.FullClassPath))
             {
                 var data = "";
-                data = GetCommandFileText(classPath.ClassNamespace, entity, contextName, srcDirectory, projectBaseName);
+                data = GetCommandFileText(classPath.ClassNamespace, entity, contextName, solutionDirectory, srcDirectory, projectBaseName);
                 fs.Write(Encoding.UTF8.GetBytes(data));
             }
         }
 
-        public static string GetCommandFileText(string classNamespace, Entity entity, string contextName, string srcDirectory, string projectBaseName)
+        public static string GetCommandFileText(string classNamespace, Entity entity, string contextName, string solutionDirectory, string srcDirectory, string projectBaseName)
         {
             var className = Utilities.UpdateEntityFeatureClassName(entity.Name);
             var updateCommandName = Utilities.CommandUpdateName(entity.Name);
             var updateDto = Utilities.GetDtoName(entity.Name, Dto.Update);
-            var manipulationValidator = Utilities.ValidatorNameGenerator(entity.Name, Validator.Manipulation);
 
             var primaryKeyPropType = Entity.PrimaryKeyProperty.Type;
             var primaryKeyPropName = Entity.PrimaryKeyProperty.Name;
@@ -42,66 +41,62 @@
             var updatedEntityProp = $"{entityNameLowercase}ToUpdate";
 
             var entityClassPath = ClassPathHelper.EntityClassPath(srcDirectory, "", entity.Plural, projectBaseName);
-            var dtoClassPath = ClassPathHelper.DtoClassPath(srcDirectory, "", entity.Name, projectBaseName);
-            var exceptionsClassPath = ClassPathHelper.ExceptionsClassPath(srcDirectory, "", projectBaseName);
+            var dtoClassPath = ClassPathHelper.DtoClassPath(solutionDirectory, "", entity.Name, projectBaseName);
+            var exceptionsClassPath = ClassPathHelper.ExceptionsClassPath(srcDirectory, "");
             var contextClassPath = ClassPathHelper.DbContextClassPath(srcDirectory, "", projectBaseName);
             var validatorsClassPath = ClassPathHelper.ValidationClassPath(srcDirectory, "", entity.Plural, projectBaseName);
 
-            return @$"namespace {classNamespace}
+            return @$"namespace {classNamespace};
+
+using {entityClassPath.ClassNamespace};
+using {dtoClassPath.ClassNamespace};
+using {exceptionsClassPath.ClassNamespace};
+using {contextClassPath.ClassNamespace};
+using {validatorsClassPath.ClassNamespace};
+using AutoMapper;
+using AutoMapper.QueryableExtensions;
+using MediatR;
+using Microsoft.EntityFrameworkCore;
+using System.Threading;
+using System.Threading.Tasks;
+
+public static class {className}
 {{
-    using {entityClassPath.ClassNamespace};
-    using {dtoClassPath.ClassNamespace};
-    using {exceptionsClassPath.ClassNamespace};
-    using {contextClassPath.ClassNamespace};
-    using {validatorsClassPath.ClassNamespace};
-    using AutoMapper;
-    using AutoMapper.QueryableExtensions;
-    using MediatR;
-    using Microsoft.EntityFrameworkCore;
-    using System;
-    using System.Threading;
-    using System.Threading.Tasks;
-    using System.Collections.Generic;
-
-    public static class {className}
+    public class {updateCommandName} : IRequest<bool>
     {{
-        public class {updateCommandName} : IRequest<bool>
-        {{
-            public {primaryKeyPropType} {primaryKeyPropName} {{ get; set; }}
-            public {updateDto} {commandProp} {{ get; set; }}
+        public {primaryKeyPropType} {primaryKeyPropName} {{ get; set; }}
+        public {updateDto} {commandProp} {{ get; set; }}
 
-            public {updateCommandName}({primaryKeyPropType} {entityNameLowercase}, {updateDto} {newEntityDataProp})
-            {{
-                {primaryKeyPropName} = {entityNameLowercase};
-                {commandProp} = {newEntityDataProp};
-            }}
+        public {updateCommandName}({primaryKeyPropType} {entityNameLowercase}, {updateDto} {newEntityDataProp})
+        {{
+            {primaryKeyPropName} = {entityNameLowercase};
+            {commandProp} = {newEntityDataProp};
+        }}
+    }}
+
+    public class Handler : IRequestHandler<{updateCommandName}, bool>
+    {{
+        private readonly {contextName} _db;
+        private readonly IMapper _mapper;
+
+        public Handler({contextName} db, IMapper mapper)
+        {{
+            _mapper = mapper;
+            _db = db;
         }}
 
-        public class Handler : IRequestHandler<{updateCommandName}, bool>
+        public async Task<bool> Handle({updateCommandName} request, CancellationToken cancellationToken)
         {{
-            private readonly {contextName} _db;
-            private readonly IMapper _mapper;
+            var {updatedEntityProp} = await _db.{entity.Plural}
+                .FirstOrDefaultAsync({entity.Lambda} => {entity.Lambda}.{primaryKeyPropName} == request.{primaryKeyPropName}, cancellationToken);
 
-            public Handler({contextName} db, IMapper mapper)
-            {{
-                _mapper = mapper;
-                _db = db;
-            }}
+            if ({updatedEntityProp} == null)
+                throw new NotFoundException(""{entity.Name}"", request.{primaryKeyPropName});
 
-            public async Task<bool> Handle({updateCommandName} request, CancellationToken cancellationToken)
-            {{
-                var {updatedEntityProp} = await _db.{entity.Plural}
-                    .FirstOrDefaultAsync({entity.Lambda} => {entity.Lambda}.{primaryKeyPropName} == request.{primaryKeyPropName});
+            {updatedEntityProp}.Update(request.{commandProp});
+            await _db.SaveChangesAsync(cancellationToken);
 
-                if ({updatedEntityProp} == null)
-                    throw new KeyNotFoundException();
-
-                _mapper.Map(request.{commandProp}, {updatedEntityProp});
-
-                await _db.SaveChangesAsync();
-
-                return true;
-            }}
+            return true;
         }}
     }}
 }}";

@@ -28,6 +28,14 @@
                 return "DateTime";
             else if (prop.ToLower() == "datetime?")
                 return "DateTime?";
+            else if (prop.ToLower() == "dateonly?")
+                return "DateOnly?";
+            else if (prop.ToLower() == "dateonly")
+                return "DateOnly";
+            else if (prop.ToLower() == "timeonly?")
+                return "TimeOnly?";
+            else if (prop.ToLower() == "timeonly")
+                return "TimeOnly";
             else if (prop.ToLower() == "datetimeoffset")
                 return "DateTimeOffset";
             else if (prop.ToLower() == "datetimeoffset?")
@@ -38,11 +46,9 @@
                 return prop;
         }
 
-        public static ClassPath GetStartupClassPath(string envName, string solutionDirectory, string projectBaseName)
+        public static ClassPath GetStartupClassPath(string solutionDirectory, string projectBaseName)
         {
-            return envName == "Production"
-                ? ClassPathHelper.StartupClassPath(solutionDirectory, $"Startup.cs", projectBaseName)
-                : ClassPathHelper.StartupClassPath(solutionDirectory, $"Startup{envName}.cs", projectBaseName);
+            return ClassPathHelper.StartupClassPath(solutionDirectory, $"Startup.cs", projectBaseName);
         }
 
         public static string SolutionGuard(string solutionDirectory)
@@ -72,7 +78,7 @@
         {
             return entityPlural;
         }
-        
+
         public static string GetWebHostFactoryName()
         {
             return "TestingWebApplicationFactory";
@@ -86,11 +92,6 @@
         public static string GetSeederName(Entity entity)
         {
             return $"{entity.Name}Seeder";
-        }
-
-        public static string GetRepositoryListMethodName(string pluralEntity)
-        {
-            return $"Get{pluralEntity}Async";
         }
 
         public static string GetMassTransitRegistrationName()
@@ -108,35 +109,9 @@
             return "SwaggerServiceExtension";
         }
 
-        public static List<Policy> GetPoliciesThatDoNotExist(List<Policy> policies, string existingFileFullClassPath)
+        public static string GetAppSettingsName(bool asJson = true)
         {
-            var nonExistantPolicies = new List<Policy>();
-            nonExistantPolicies.AddRange(policies);
-
-            var fileText = File.ReadAllText(existingFileFullClassPath);
-
-            foreach (var policy in policies)
-            {
-                if (fileText.Contains(policy.Name) || fileText.Contains(policy.PolicyValue))
-                {
-                    nonExistantPolicies.Remove(policy);
-                }
-            }
-
-            return nonExistantPolicies;
-        }
-
-        public static string GetAppSettingsName(string envName, bool asJson = true)
-        {
-            if (String.IsNullOrEmpty(envName))
-                return asJson ? $"appsettings.json" : $"appsettings";
-
-            return asJson ? $"appsettings.{envName}.json" : $"appsettings.{envName}";
-        }
-
-        public static string GetStartupName(string envName)
-        {
-            return envName == "Production" ? "Startup" : $"Startup{envName}";
+            return asJson ? $"appsettings.json" : $"appsettings";
         }
 
         public static string GetProfileName(string entityName)
@@ -212,6 +187,105 @@
         public static string FakerName(string objectToFakeName)
         {
             return $"Fake{objectToFakeName}";
+        }
+
+        public static string FakeParentTestHelpers(Entity entity, out string fakeParentIdRuleFor)
+        {
+            var fakeParent = "";
+            fakeParentIdRuleFor = "";
+            foreach (var entityProperty in entity.Properties)
+            {
+                if (entityProperty.IsForeignKey && !entityProperty.IsMany && entityProperty.IsPrimativeType)
+                {
+                    var fakeParentClass = Utilities.FakerName(entityProperty.ForeignEntityName);
+                    var fakeParentCreationDto =
+                        Utilities.FakerName(Utilities.GetDtoName(entityProperty.ForeignEntityName, Dto.Creation));
+                    fakeParent +=
+                        @$"var fake{entityProperty.ForeignEntityName}One = {fakeParentClass}.Generate(new {fakeParentCreationDto}().Generate());
+        await InsertAsync(fake{entityProperty.ForeignEntityName}One);{Environment.NewLine}{Environment.NewLine}        ";
+                    fakeParentIdRuleFor +=
+                        $"{Environment.NewLine}            .RuleFor({entity.Lambda} => {entity.Lambda}.{entityProperty.Name}, _ => fake{entityProperty.ForeignEntityName}One.Id){Environment.NewLine}            ";
+                }
+            }
+
+            return fakeParent;
+        }
+
+        public static string FakeParentTestHelpersTwoCount(Entity entity, out string fakeParentIdRuleForOne, out string fakeParentIdRuleForTwo)
+        {
+            var fakeParent = "";
+            fakeParentIdRuleForOne = "";
+            fakeParentIdRuleForTwo = "";
+            foreach (var entityProperty in entity.Properties)
+            {
+                if (entityProperty.IsForeignKey && !entityProperty.IsMany && entityProperty.IsPrimativeType)
+                {
+                    var fakeParentClass = Utilities.FakerName(entityProperty.ForeignEntityName);
+                    var fakeParentCreationDto =
+                        Utilities.FakerName(Utilities.GetDtoName(entityProperty.ForeignEntityName, Dto.Creation));
+                    fakeParent +=
+                        @$"var fake{entityProperty.ForeignEntityName}One = {fakeParentClass}.Generate(new {fakeParentCreationDto}().Generate());
+        var fake{entityProperty.ForeignEntityName}Two = {fakeParentClass}.Generate(new {fakeParentCreationDto}().Generate());
+        await InsertAsync(fake{entityProperty.ForeignEntityName}One, fake{entityProperty.ForeignEntityName}Two);{Environment.NewLine}{Environment.NewLine}        ";
+                    fakeParentIdRuleForOne +=
+                        $"{Environment.NewLine}            .RuleFor({entity.Lambda} => {entity.Lambda}.{entityProperty.Name}, _ => fake{entityProperty.ForeignEntityName}One.Id){Environment.NewLine}            ";
+                    fakeParentIdRuleForTwo +=
+                        $"{Environment.NewLine}            .RuleFor({entity.Lambda} => {entity.Lambda}.{entityProperty.Name}, _ => fake{entityProperty.ForeignEntityName}Two.Id){Environment.NewLine}            ";
+                }
+            }
+
+            return fakeParent;
+        }
+
+
+        public static string FakeParentTestHelpersThreeCount(Entity entity, out string fakeParentIdRuleForOne, out string fakeParentIdRuleForTwo, out string fakeParentIdRuleForThree)
+        {
+            var fakeParent = "";
+            fakeParentIdRuleForOne = "";
+            fakeParentIdRuleForTwo = "";
+            fakeParentIdRuleForThree = "";
+            foreach (var entityProperty in entity.Properties)
+            {
+                if (entityProperty.IsForeignKey && !entityProperty.IsMany && entityProperty.IsPrimativeType)
+                {
+                    var fakeParentClass = Utilities.FakerName(entityProperty.ForeignEntityName);
+                    var fakeParentCreationDto =
+                        Utilities.FakerName(Utilities.GetDtoName(entityProperty.ForeignEntityName, Dto.Creation));
+                    fakeParent +=
+                        @$"var fake{entityProperty.ForeignEntityName}One = {fakeParentClass}.Generate(new {fakeParentCreationDto}().Generate());
+        var fake{entityProperty.ForeignEntityName}Two = {fakeParentClass}.Generate(new {fakeParentCreationDto}().Generate());
+        var fake{entityProperty.ForeignEntityName}Three = {fakeParentClass}.Generate(new {fakeParentCreationDto}().Generate());
+        await InsertAsync(fake{entityProperty.ForeignEntityName}One, fake{entityProperty.ForeignEntityName}Two, fake{entityProperty.ForeignEntityName}Three);{Environment.NewLine}{Environment.NewLine}        ";
+                    fakeParentIdRuleForOne +=
+                        $"{Environment.NewLine}            .RuleFor({entity.Lambda} => {entity.Lambda}.{entityProperty.Name}, _ => fake{entityProperty.ForeignEntityName}One.Id){Environment.NewLine}            ";
+                    fakeParentIdRuleForTwo +=
+                        $"{Environment.NewLine}            .RuleFor({entity.Lambda} => {entity.Lambda}.{entityProperty.Name}, _ => fake{entityProperty.ForeignEntityName}Two.Id){Environment.NewLine}            ";
+                    fakeParentIdRuleForThree +=
+                        $"{Environment.NewLine}            .RuleFor({entity.Lambda} => {entity.Lambda}.{entityProperty.Name}, _ => fake{entityProperty.ForeignEntityName}Three.Id){Environment.NewLine}            ";
+                }
+            }
+
+            return fakeParent;
+        }
+
+        public static string GetForeignEntityUsings(string testDirectory, Entity entity,
+            string projectBaseName)
+        {
+            var foreignEntityUsings = "";
+            var foreignProps = entity.Properties.Where(e => e.IsForeignKey).ToList();
+            foreach (var entityProperty in foreignProps)
+            {
+                if (entityProperty.IsForeignKey && !entityProperty.IsMany)
+                {
+                    var parentClassPath =
+                        ClassPathHelper.TestFakesClassPath(testDirectory, $"", entityProperty.ForeignEntityName, projectBaseName);
+
+                    foreignEntityUsings += $@"
+using {parentClassPath.ClassNamespace};";
+                }
+            }
+
+            return foreignEntityUsings;
         }
 
         public static string GetDtoName(string entityName, Dto dto)
@@ -309,49 +383,6 @@
             return $@"api/{entityNamePlural.ToLower()}";
         }
 
-        public static string PolicyInfraStringBuilder(Policy policy)
-        {
-            if (policy.PolicyType == Enum.GetName(typeof(PolicyType), PolicyType.Scope))
-            {
-                // ex: options.AddPolicy("CanRead", policy => policy.RequireClaim("scope", "detailedrecipes.read"));
-                return $@"                options.AddPolicy(""{policy.Name}"",
-                    policy => policy.RequireClaim(""scope"", ""{policy.PolicyValue}""));";
-            }
-            //else if (policy.PolicyType == Enum.GetName(typeof(PolicyType), PolicyType.Role))
-            //{
-            //    // ex: options.AddPolicy("RequireAdministratorRole", policy => policy.RequireRole("Administrator"));
-            //    return $@"                options.AddPolicy(""{policy.Name}"",
-            //        policy => policy.RequireRole(""{policy.PolicyValue}""));";
-            //}
-
-            // claim ex: options.AddPolicy("EmployeeOnly", policy => policy.RequireClaim("EmployeeNumber"));
-            return $@"                options.AddPolicy(""{policy.Name}"",
-                    policy => policy.RequireClaim(""{policy.PolicyValue}""));";
-        }
-
-        public static object GetSwaggerPolicies(IEnumerable<Policy> policies)
-        {
-            var policyStrings = "";
-
-            //var uniquePolicies = policies.DistinctBy(); //TODO use with .net6
-            var uniquePolicies = policies
-                .GroupBy(p => new {p.Name, p.PolicyValue, p.PolicyType} )
-                .Select(g => g.First())
-                .ToList();
-            foreach (var policy in uniquePolicies)
-            {
-                policyStrings += $@"
-                                {{ ""{policy.PolicyValue}"",""{policy.Name}"" }},";
-            }
-
-            return policyStrings;
-        }
-
-        public static string BuildTestAuthorizationString(List<Policy> policies, List<Endpoint> endpoints, string entityName, PolicyType policyType)
-        {
-            return "{\"" + string.Join("\", \"", policies.Select(r => r.PolicyValue)) + "\"}";
-        }
-
         public static void AddStartupEnvironmentsWithServices(
             string solutionDirectory,
             string projectName,
@@ -360,44 +391,20 @@
             SwaggerConfig swaggerConfig,
             int port,
             bool useJwtAuth,
-            string projectBaseName = "")
+            string projectBaseName,
+            IFileSystem fileSystem)
         {
-            // add a development environment by default for local work if none exists
+            AppSettingsBuilder.CreateWebApiAppSettings(solutionDirectory, dbName, projectBaseName);
+
             if (environments.Where(e => e.EnvironmentName == "Development").Count() == 0)
                 environments.Add(new ApiEnvironment { EnvironmentName = "Development", ProfileName = $"{projectName} (Development)" });
 
-            if (environments.Where(e => e.EnvironmentName == "Production").Count() == 0)
-                environments.Add(new ApiEnvironment { EnvironmentName = "Production", ProfileName = $"{projectName} (Production)" });
-
-            var sortedEnvironments = environments.OrderBy(e => e.EnvironmentName == "Development" ? 1 : 0).ToList(); // sets dev as default profile
-            foreach (var env in sortedEnvironments)
+            foreach (var env in environments)
             {
-                // default startup is already built in cleanup phase
-                if (env.EnvironmentName != "Production")
-                    StartupBuilder.CreateWebApiStartup(solutionDirectory, env.EnvironmentName, useJwtAuth, projectBaseName);
-
-                AppSettingsBuilder.CreateWebApiAppSettings(solutionDirectory, env, dbName, projectBaseName);
                 WebApiLaunchSettingsModifier.AddProfile(solutionDirectory, env, port, projectBaseName);
-
-                //services
-                if (!swaggerConfig.IsSameOrEqualTo(new SwaggerConfig()))
-                    SwaggerBuilder.RegisterSwaggerInStartup(solutionDirectory, env, projectBaseName);
             }
-
-            // add an integration testing env to make sure that an in memory database is used
-            var functionalEnv = new ApiEnvironment() { EnvironmentName = "FunctionalTesting" };
-            AppSettingsBuilder.CreateWebApiAppSettings(solutionDirectory, functionalEnv, "", projectBaseName);
-        }
-
-        public static string GetForeignKeyIncludes(Entity entity)
-        {
-            var fkIncludes = "";
-            foreach (var fk in entity.Properties.Where(p => p.IsForeignKey))
-            {
-                fkIncludes += $@"{Environment.NewLine}                .Include({fk.Name.ToLower().Substring(0, 1)} => {fk.Name.ToLower().Substring(0, 1)}.{fk.Name})";
-            }
-
-            return fkIncludes;
+            if (!swaggerConfig.IsSameOrEqualTo(new SwaggerConfig()))
+                SwaggerBuilder.RegisterSwaggerInStartup(solutionDirectory, projectBaseName);
         }
 
         public static void CreateFile(ClassPath classPath, string fileText, IFileSystem fileSystem)
@@ -412,7 +419,7 @@
             fs.Write(Encoding.UTF8.GetBytes(fileText));
         }
 
-        public static void GitSetup(string solutionDirectory)
+        public static void GitSetup(string solutionDirectory, bool useSystemGitUser)
         {
             GitBuilder.CreateGitIgnore(solutionDirectory);
 
@@ -422,7 +429,9 @@
             string[] allFiles = Directory.GetFiles(solutionDirectory, "*.*", SearchOption.AllDirectories);
             Commands.Stage(repo, allFiles);
 
-            var author = new Signature("Craftsman", "craftsman", DateTimeOffset.Now);
+            var author = useSystemGitUser 
+                ? repo.Config.BuildSignature(DateTimeOffset.Now) 
+                : new Signature("Craftsman", "craftsman", DateTimeOffset.Now);
             repo.Commit("Initial Commit", author, author);
         }
 
@@ -512,8 +521,8 @@
                 return defaultValue == null ? "" : @$" = ""{defaultValue}"";";
 
             if ((prop.Type.IsGuidPropertyType() && !prop.Type.Contains("?") && !prop.IsForeignKey))
-                return !string.IsNullOrEmpty(defaultValue) ? @$" = Guid.Parse(""{defaultValue}"");" : @" = Guid.NewGuid();";
-            
+                return !string.IsNullOrEmpty(defaultValue) ? @$" = Guid.Parse(""{defaultValue}"");" : "";
+
             return string.IsNullOrEmpty(defaultValue) ? "" : $" = {defaultValue};";
         }
 
@@ -581,7 +590,7 @@
                     }
                 });
         }
-        
+
         public static string CreateApiRouteClasses(Entity entity)
         {
             var entityRouteClasses = "";
@@ -589,18 +598,40 @@
             var lowercaseEntityPluralName = entity.Plural.LowercaseFirstLetter();
             var pkName = Entity.PrimaryKeyProperty.Name;
 
-            entityRouteClasses += $@"{Environment.NewLine}{Environment.NewLine}        public static class {entity.Plural}
-        {{
-            public const string {pkName} = ""{{{pkName.LowercaseFirstLetter()}}}"";
-            public const string GetList = Base + ""/{lowercaseEntityPluralName}"";
-            public const string GetRecord = Base + ""/{lowercaseEntityPluralName}/"" + {pkName};
-            public const string Create = Base + ""/{lowercaseEntityPluralName}"";
-            public const string Delete = Base + ""/{lowercaseEntityPluralName}/"" + {pkName};
-            public const string Put = Base + ""/{lowercaseEntityPluralName}/"" + {pkName};
-            public const string Patch = Base + ""/{lowercaseEntityPluralName}/"" + {pkName};
-        }}";
+            entityRouteClasses += $@"{Environment.NewLine}{Environment.NewLine}public static class {entity.Plural}
+    {{
+        public const string {pkName} = ""{{{pkName.LowercaseFirstLetter()}}}"";
+        public const string GetList = $""{{Base}}/{lowercaseEntityPluralName}"";
+        public const string GetRecord = $""{{Base}}/{lowercaseEntityPluralName}/{{{pkName}}}"";
+        public const string Create = $""{{Base}}/{lowercaseEntityPluralName}"";
+        public const string Delete = $""{{Base}}/{lowercaseEntityPluralName}/{{{pkName}}}"";
+        public const string Put = $""{{Base}}/{lowercaseEntityPluralName}/{{{pkName}}}"";
+        public const string Patch = $""{{Base}}/{lowercaseEntityPluralName}/{{{pkName}}}"";
+        public const string CreateBatch = $""{{Base}}/{lowercaseEntityPluralName}/batch"";
+    }}";
 
             return entityRouteClasses;
+        }
+
+        public static bool ProjectUsesSoftDelete(string srcDirectory, string projectBaseName)
+        {
+            var classPath = ClassPathHelper.EntityClassPath(srcDirectory, $"BaseEntity.cs", "", projectBaseName);
+
+            if (!Directory.Exists(classPath.ClassDirectory))
+                return false;
+
+            if (!File.Exists(classPath.FullClassPath))
+                return false;
+
+            using var input = File.OpenText(classPath.FullClassPath);
+            string line;
+            while (null != (line = input.ReadLine()))
+            {
+                if (line.Contains($"Deleted"))
+                    return true;
+            }
+
+            return false;
         }
     }
 }

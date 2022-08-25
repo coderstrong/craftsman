@@ -32,12 +32,13 @@
             return @$"<Project Sdk=""Microsoft.NET.Sdk"">
 
   <PropertyGroup>
-    <TargetFramework>net5.0</TargetFramework>
+    <TargetFramework>net6.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include=""AutoBogus"" Version=""2.13.0"" />
-    <PackageReference Include=""Bogus"" Version=""33.0.2"" />
+    <PackageReference Include=""AutoBogus"" Version=""2.13.1"" />
+    <PackageReference Include=""Bogus"" Version=""34.0.1"" />
   </ItemGroup>
 
   <ItemGroup>

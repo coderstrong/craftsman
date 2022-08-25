@@ -10,22 +10,22 @@
     using System.IO.Abstractions;
     using System.Linq;
     using System.Text;
+    using Humanizer;
 
     public class SwaggerBuilder
     {
-        public static void AddSwagger(string solutionDirectory, SwaggerConfig swaggerConfig, string projectName, bool addJwtAuthentication, IEnumerable<Policy> policies, string projectBaseName, IFileSystem fileSystem)
+        public static void AddSwagger(string solutionDirectory, SwaggerConfig swaggerConfig, string projectName, bool addJwtAuthentication, string policyName, string projectBaseName, IFileSystem fileSystem)
         {
-            if (!swaggerConfig.IsSameOrEqualTo(new SwaggerConfig()))
-            {
-                AddSwaggerServiceExtension(solutionDirectory, projectBaseName, swaggerConfig, projectName, addJwtAuthentication, policies, fileSystem);
-                WebApiAppExtensionsBuilder.CreateSwaggerWebApiAppExtension(solutionDirectory, swaggerConfig, addJwtAuthentication, projectBaseName, fileSystem);
-                UpdateWebApiCsProjSwaggerSettings(solutionDirectory, projectBaseName);
-            }
+            if (swaggerConfig.IsSameOrEqualTo(new SwaggerConfig())) return;
+            
+            AddSwaggerServiceExtension(solutionDirectory, projectBaseName, swaggerConfig, projectName, addJwtAuthentication, policyName, fileSystem);
+            WebApiAppExtensionsBuilder.CreateSwaggerWebApiAppExtension(solutionDirectory, swaggerConfig, addJwtAuthentication, projectBaseName, fileSystem);
+            UpdateWebApiCsProjSwaggerSettings(solutionDirectory, projectBaseName);
         }
 
-        public static void RegisterSwaggerInStartup(string solutionDirectory, ApiEnvironment env, string projectBaseName = "")
+        public static void RegisterSwaggerInStartup(string srcDirectory, string projectBaseName = "")
         {
-            var classPath = ClassPathHelper.StartupClassPath(solutionDirectory, $"{Utilities.GetStartupName(env.EnvironmentName)}.cs", projectBaseName);
+            var classPath = Utilities.GetStartupClassPath(srcDirectory, projectBaseName);
 
             if (!Directory.Exists(classPath.ClassDirectory))
                 throw new DirectoryNotFoundException($"The `{classPath.ClassDirectory}` directory could not be found.");
@@ -44,11 +44,11 @@
                         var newText = $"{line}";
                         if (line.Contains("Dynamic Services"))
                         {
-                            newText += $"{Environment.NewLine}            services.AddSwaggerExtension(_config);";
+                            newText += $"{Environment.NewLine}        services.AddSwaggerExtension(_config);";
                         }
                         else if (line.Contains("Dynamic App"))
                         {
-                            newText += $"{Environment.NewLine}            app.UseSwaggerExtension(_config);";
+                            newText += $"{Environment.NewLine}        app.UseSwaggerExtension(_config);";
                         }
 
                         output.WriteLine(newText);
@@ -61,120 +61,110 @@
             File.Move(tempPath, classPath.FullClassPath);
         }
 
-        public static void AddSwaggerServiceExtension(string srcDirectory, string projectBaseName, SwaggerConfig swaggerConfig, string projectName, bool addJwtAuthentication, IEnumerable<Policy> policies, IFileSystem fileSystem)
+        public static void AddSwaggerServiceExtension(string srcDirectory, string projectBaseName, SwaggerConfig swaggerConfig, string projectName, bool addJwtAuthentication, string policyName, IFileSystem fileSystem)
         {
             var classPath = ClassPathHelper.WebApiServiceExtensionsClassPath(srcDirectory, $"{Utilities.GetSwaggerServiceExtensionName()}.cs", projectBaseName);
-
-            if (!fileSystem.Directory.Exists(classPath.ClassDirectory))
-                fileSystem.Directory.CreateDirectory(classPath.ClassDirectory);
-
-            if (fileSystem.File.Exists(classPath.FullClassPath))
-                throw new FileAlreadyExistsException(classPath.FullClassPath);
-
-            using var fs = fileSystem.File.Create(classPath.FullClassPath);
-            var data = "";
-            data = GetSwaggerServiceExtensionText(classPath.ClassNamespace, swaggerConfig, projectName, addJwtAuthentication, policies);
-            fs.Write(Encoding.UTF8.GetBytes(data));
+            var fileText = GetSwaggerServiceExtensionText(classPath.ClassNamespace, swaggerConfig, projectName, addJwtAuthentication, policyName);
+            Utilities.CreateFile(classPath,fileText, fileSystem);
         }
 
-        public static string GetSwaggerServiceExtensionText(string classNamespace, SwaggerConfig swaggerConfig, string projectName, bool addJwtAuthentication, IEnumerable<Policy> policies)
+        public static string GetSwaggerServiceExtensionText(string classNamespace, SwaggerConfig swaggerConfig, string projectName, bool addJwtAuthentication, string policyName)
         {
-            return @$"namespace {classNamespace}
-{{
-    using AutoMapper;
-    using FluentValidation.AspNetCore;
-    using MediatR;
-    using Microsoft.AspNetCore.Mvc;
-    using Microsoft.Extensions.Configuration;
-    using Microsoft.Extensions.DependencyInjection;
-    using Microsoft.OpenApi.Models;
-    using System;
-    using System.IO;
-    using System.Collections.Generic;
-    using System.Reflection;
+            return @$"namespace {classNamespace};
 
-    public static class SwaggerServiceExtension
-    {{
-        {GetSwaggerServiceExtensionText(swaggerConfig, projectName, addJwtAuthentication, policies)}
-    }}
+using AutoMapper;
+using FluentValidation.AspNetCore;
+using MediatR;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.OpenApi.Models;
+using System;
+using System.IO;
+using System.Collections.Generic;
+using System.Reflection;
+
+public static class SwaggerServiceExtension
+{{
+    {GetSwaggerServiceExtensionText(swaggerConfig, projectName, addJwtAuthentication, policyName)}
 }}";
         }
 
-        private static string GetSwaggerServiceExtensionText(SwaggerConfig swaggerConfig, string projectName, bool addJwtAuthentication, IEnumerable<Policy> policies)
+        private static string GetSwaggerServiceExtensionText(SwaggerConfig swaggerConfig, string projectName, bool addJwtAuthentication, string policyName)
         {
             var contactUrlLine = IsCleanUri(swaggerConfig.ApiContact.Url)
                 ? $@"
                             Url = new Uri(""{ swaggerConfig.ApiContact.Url }""),"
                 : "";
 
-            var LicenseUrlLine = IsCleanUri(swaggerConfig.LicenseUrl)
+            var licenseUrlLine = IsCleanUri(swaggerConfig.LicenseUrl)
                 ? $@"Url = new Uri(""{ swaggerConfig.LicenseUrl }""),"
                 : "";
 
-            var licenseText = GetLicenseText(swaggerConfig.LicenseName, LicenseUrlLine);
+            var licenseText = GetLicenseText(swaggerConfig.LicenseName, licenseUrlLine);
 
-            var policyScopes = Utilities.GetSwaggerPolicies(policies);
             var swaggerAuth = addJwtAuthentication ? $@"
 
-                config.AddSecurityDefinition(""oauth2"", new OpenApiSecurityScheme
+            config.AddSecurityDefinition(""oauth2"", new OpenApiSecurityScheme
+            {{
+                Type = SecuritySchemeType.OAuth2,
+                Flows = new OpenApiOAuthFlows
                 {{
-                    Type = SecuritySchemeType.OAuth2,
-                    Flows = new OpenApiOAuthFlows
+                    AuthorizationCode = new OpenApiOAuthFlow
                     {{
-                        AuthorizationCode = new OpenApiOAuthFlow
+                        AuthorizationUrl = new Uri(Environment.GetEnvironmentVariable(""AUTH_AUTHORIZATION_URL"")),
+                        TokenUrl = new Uri(Environment.GetEnvironmentVariable(""AUTH_TOKEN_URL"")),
+                        Scopes = new Dictionary<string, string>
                         {{
-                            AuthorizationUrl = new Uri(configuration[""JwtSettings:AuthorizationUrl""]),
-                            TokenUrl = new Uri(configuration[""JwtSettings:TokenUrl""]),
-                            Scopes = new Dictionary<string, string>
-                            {{{policyScopes}
-                            }}
+                            {{""{policyName}"", ""{projectName.Humanize()} access""}}
                         }}
                     }}
-                }});
+                }}
+            }});
 
-                config.AddSecurityRequirement(new OpenApiSecurityRequirement()
+            config.AddSecurityRequirement(new OpenApiSecurityRequirement()
+            {{
                 {{
+                    new OpenApiSecurityScheme
                     {{
-                        new OpenApiSecurityScheme
+                        Reference = new OpenApiReference
                         {{
-                            Reference = new OpenApiReference
-                            {{
-                                Type = ReferenceType.SecurityScheme,
-                                Id = ""oauth2""
-                            }},
-                            Scheme = ""oauth2"",
-                            Name = ""oauth2"",
-                            In = ParameterLocation.Header
+                            Type = ReferenceType.SecurityScheme,
+                            Id = ""oauth2""
                         }},
-                        new List<string>()
-                    }}
-                }}); " : $@"";
+                        Scheme = ""oauth2"",
+                        Name = ""oauth2"",
+                        In = ParameterLocation.Header
+                    }},
+                    new List<string>()
+                }}
+            }}); " : $@"";
 
             var swaggerXmlComments = "";
             if (swaggerConfig.AddSwaggerComments)
                 swaggerXmlComments = $@"
 
-                config.IncludeXmlComments(string.Format(@$""{{AppDomain.CurrentDomain.BaseDirectory}}{{Path.DirectorySeparatorChar}}{projectName}.WebApi.xml""));";
+            config.IncludeXmlComments(string.Format(@$""{{AppDomain.CurrentDomain.BaseDirectory}}{{Path.DirectorySeparatorChar}}{projectName}.WebApi.xml""));";
 
             var swaggerText = $@"public static void AddSwaggerExtension(this IServiceCollection services, IConfiguration configuration)
+    {{
+        services.AddSwaggerGen(config =>
         {{
-            services.AddSwaggerGen(config =>
-            {{
-                config.SwaggerDoc(
-                    ""v1"",
-                    new OpenApiInfo
+            config.SwaggerDoc(
+                ""v1"",
+                new OpenApiInfo
+                {{
+                    Version = ""v1"",
+                    Title = ""{swaggerConfig.Title}"",
+                    Description = ""{swaggerConfig.Description}"",
+                    Contact = new OpenApiContact
                     {{
-                        Version = ""v1"",
-                        Title = ""{swaggerConfig.Title}"",
-                        Description = ""{swaggerConfig.Description}"",
-                        Contact = new OpenApiContact
-                        {{
-                            Name = ""{swaggerConfig.ApiContact.Name}"",
-                            Email = ""{swaggerConfig.ApiContact.Email}"",{contactUrlLine}
-                        }},{licenseText}
-                    }});{swaggerAuth}{swaggerXmlComments}
-            }});
-        }}";
+                        Name = ""{swaggerConfig.ApiContact.Name}"",
+                        Email = ""{swaggerConfig.ApiContact.Email}"",{contactUrlLine}
+                    }},{licenseText}
+                }});{swaggerAuth}{swaggerXmlComments}
+        }});
+    }}";
 
             return swaggerText;
         }
@@ -183,11 +173,11 @@
         {
             if (licenseName?.Length > 0 || licenseUrlLine?.Length > 0)
                 return $@"
-                            License = new OpenApiLicense()
-                            {{
-                                Name = ""{licenseName}"",
-                                Url = ""{licenseUrlLine}"",
-                            }}";
+                        License = new OpenApiLicense()
+                        {{
+                            Name = ""{licenseName}"",
+                            Url = ""{licenseUrlLine}"",
+                        }}";
             return "";
         }
 
